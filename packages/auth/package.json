@@ -1,0 +1,21 @@
+{
+  "name": "@zyk-aws-admin/auth",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/expo": "catalog:",
+    "@zyk-aws-admin/db": "workspace:*",
+    "better-auth": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@zyk-aws-admin/config": "workspace:*",
+    "typescript": "^6.0.3"
+  }
+}

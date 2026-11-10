@@ -1,0 +1,22 @@
+{
+  "name": "@zyk-aws-admin/api",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
+    "@zyk-aws-admin/auth": "workspace:*",
+    "@zyk-aws-admin/db": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@zyk-aws-admin/config": "workspace:*",
+    "typescript": "^6.0.3"
+  }
+}
