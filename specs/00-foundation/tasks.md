@@ -20,19 +20,23 @@
   - 说明：新建 `packages/api/src/errors.ts`（`AppCode`、`AppErrorCause`、`appError()`）；`packages/api/src/index.ts` 的 `create()` 加 `errorFormatter`
   - 对应验收标准：R00-AC11
   - 测试：`pnpm run test`（packages/api 现有 5 个用例），`pnpm exec turbo run check-types --filter=...@zyk-aws-admin/api`（api 及依赖方 server/web/native 共 7 个任务），`pnpm exec ultracite check packages/api/src/errors.ts packages/api/src/index.ts`，另用临时 vitest 用例（`createCallerFactory` + `getErrorShape`）冒烟验证 `appError` 格式化后 `data.appCode`/`data.resetAt` 正确、普通错误两者为 `null`，用后已删除（正式用例在任务 8.4），通过（第 1 轮）
-- [ ] 5. GitHub 客户端
-  - [ ] 5.1 `packages/api/src/github/cache.ts`：60 秒 TTL、最多 500 条、淘汰最早条目，可注入 `now`
-  - [ ] 5.2 `packages/api/src/github/client.ts`：请求头、token、10 秒超时、状态码映射、Zod 校验、缓存策略（`searchUsers`/`getUserByLogin` 默认缓存，`getUserByLogin(…, { cache: false })` 和 `getUserById` 不走缓存）
-  - [ ] 5.3 `packages/api/src/github/mapper.ts`：GitHub 资料 → Prisma 写入数据；记录 → 接口输出（日期转 ISO 字符串）
+- [✅] 5. GitHub 客户端
+  - [✅] 5.1 `packages/api/src/github/cache.ts`：60 秒 TTL、最多 500 条、淘汰最早条目，可注入 `now`
+  - [✅] 5.2 `packages/api/src/github/client.ts`：请求头、token、10 秒超时、状态码映射、Zod 校验、缓存策略（`searchUsers`/`getUserByLogin` 默认缓存，`getUserByLogin(…, { cache: false })` 和 `getUserById` 不走缓存）
+  - [✅] 5.3 `packages/api/src/github/mapper.ts`：GitHub 资料 → Prisma 写入数据；记录 → 接口输出（日期转 ISO 字符串）
   - 对应验收标准：R00-AC3、R00-AC4、R00-AC5、R00-AC6、R00-AC7、R00-AC8、R00-AC9
-- [ ] 6. 上下文、环境变量和 router 骨架
+  - 测试：`pnpm run test`（packages/api 现有 5 个用例；client/缓存的正式用例在任务 8.1、8.2），`pnpm exec turbo run check-types --filter=...@zyk-aws-admin/api --filter=...@zyk-aws-admin/db`（7 个任务），`pnpm exec ultracite check packages/api/src/github packages/db/src/index.ts`，另用临时 vitest 用例（模拟 `fetch`、注入 `now`）冒烟验证缓存 TTL/淘汰、请求头与 token、搜索 URL、大小写缓存命中、61 秒后重新请求、`cache: false` 与 `getUserById` 不走缓存、404/403 限流/429/422/5xx/超时/字段不符的错误码与 `resetAt`、mapper 日期转换，用后已删除，通过（第 1 轮）
+- [✅] 6. 上下文、环境变量和 router 骨架
   - 说明：`apps/server/.env.schema` 加可选敏感的 `GITHUB_TOKEN` 并执行 `pnpm run env:generate`；`turbo.json` 的 `globalEnv` 加 `GITHUB_TOKEN`；`packages/api/src/context.ts` 加 `github`；`apps/server/src/services.ts` 创建 `github` 单例；`apps/server/src/context.ts` 传入；新建 `packages/api/src/routers/github-user.ts`（空 router）并合并进 `appRouter`
   - 对应验收标准：R00-AC12、R00-AC13
-- [ ] 7. 前端公共错误处理
+  - 测试：`pnpm run test`（packages/api 现有 5 个用例），`pnpm exec turbo run check-types --filter=...@zyk-aws-admin/api --filter=...@zyk-aws-admin/db`（7 个任务），`pnpm exec ultracite check apps/server/src/context.ts apps/server/src/services.ts packages/api/src/context.ts packages/api/src/routers packages/api/src/github packages/db/src/index.ts turbo.json`（11 个文件），另确认 `apps/server/src/env.ts` 已生成可选敏感的 `GITHUB_TOKEN`、`apps/web`/`apps/native` 中没有 `GITHUB_TOKEN`，通过（第 1 轮）
+- [✅] 7. 前端公共错误处理
   - 说明：新建 `apps/web/src/lib/app-error.ts`（`appCode` → 中文提示、重置时间格式化）；`apps/web/src/utils/trpc.ts` 全局 toast 支持 `meta.skipGlobalErrorToast`
   - 对应验收标准：R00-AC11
+  - 测试：`pnpm run test`（packages/api 现有 5 个用例），`pnpm exec turbo run check-types --filter=web`（web 及依赖共 5 个任务），`pnpm exec ultracite check apps/web/src/lib/app-error.ts apps/web/src/utils/trpc.ts`，另用 `node --experimental-strip-types` 临时脚本冒烟验证 7 个 appCode 文案、同步场景、限流 HH:mm / HH:mm:ss 与缺 resetAt、未知码/原型键/空 message/非 Error 回退共 23 项，并用 web 的 `@tanstack/react-query` 验证 `meta.skipGlobalErrorToast` 为 true 时 `QueryCache.onError` 不弹 toast、未设或 false 时照常弹，脚本放在临时目录、未进项目，通过（第 1 轮）
 - [ ] 8. 编写测试
-  - [ ] 8.1 `client.test.ts`（模拟 `fetch`）：请求头齐全、有/无 token 时 `Authorization` 的有无、搜索 URL 带 `type:user`/`per_page=10`/`page`；搜索和资料查询各自的成功、404、403+remaining=0（搜索得到 `GITHUB_SEARCH_RATE_LIMITED`、资料得到 `GITHUB_RATE_LIMITED`，`resetAt` 正确）、429、422、5xx、超时（假的 `fetch` 抛 `TimeoutError`）、网络错误、返回字段缺失或类型不对
+  - [✅] 8.1 `client.test.ts`（模拟 `fetch`）：请求头齐全、有/无 token 时 `Authorization` 的有无、搜索 URL 带 `type:user`/`per_page=10`/`page`；搜索和资料查询各自的成功、404、403+remaining=0（搜索得到 `GITHUB_SEARCH_RATE_LIMITED`、资料得到 `GITHUB_RATE_LIMITED`，`resetAt` 正确）、429、422、5xx、超时（假的 `fetch` 抛 `TimeoutError`）、网络错误、返回字段缺失或类型不对
+    - 测试：`pnpm run test`（packages/api 共 58 个用例，其中 `src/github/client.test.ts` 53 个），`pnpm exec turbo run check-types --filter=@zyk-aws-admin/api`（3 个任务），`pnpm exec ultracite check packages/api`（16 个文件），通过（第 1 轮）
   - [ ] 8.2 缓存：同一关键字不同大小写第二次不发请求；61 秒后重新请求；第 501 条写入后最早的条目被淘汰；`getUserById` 和 `cache: false` 每次都发请求；错误响应不进缓存
   - [ ] 8.3 `schemas.test.ts`：用户名合法/非法边界（39/40 位、首尾 `-`、`--`、中文、空串）；关键字首尾空格、0/1/100/101 个字符
   - [ ] 8.4 `errors.test.ts`：通过 `createCaller` 或 `t.createCallerFactory` 调用一个抛 `appError` 的测试 procedure，断言格式化后的 `data.appCode`、`data.resetAt`；普通错误 `appCode` 为 `null`
@@ -43,3 +47,4 @@
 
 - CR（2026-11-10）：Codex 提出 0 条，采纳 0 条；不采纳：无
 - CR（2026-11-10）：Codex 提出 0 条，采纳 0 条；不采纳：无（Codex 未发现可操作问题；其注明的数据库集成测试未运行属审查说明，非问题，交 W6R 回归测试覆盖）
+- CR（2026-11-10）：Codex 提出 0 条，采纳 0 条；不采纳：无（Codex 未发现可操作问题，api/server/web 类型检查通过；其注明的数据库集成测试未运行属审查说明，非问题，交 W6R 回归测试覆盖）

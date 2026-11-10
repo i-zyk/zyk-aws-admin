@@ -43,17 +43,18 @@
 | `packages/api/src/errors.ts` | `AppCode` 常量、`AppErrorCause` 类、`appError(code, appCode, extra?)` |
 | `packages/api/src/index.ts` | `initTRPC.context<Context>().create({ errorFormatter })` |
 | `packages/api/src/github/schemas.ts` | `githubUsernameSchema`、`searchKeywordSchema`、`remarkSchema`、`tagsSchema`，以及 `githubSearchItemSchema`、`githubSearchResponseSchema`、`githubUserResponseSchema`（保留 GitHub 原始的 snake_case 字段名，可空文本字段缺失或为 null 时统一成 null，日期保持 ISO 字符串，由 mapper 转换）；导出类型 `GithubSearchItem`、`GithubSearchResponse`、`GithubProfile` 和长度上限常量 |
-| `packages/api/src/github/cache.ts` | `createTtlCache({ ttlMs: 60_000, maxEntries: 500, now })`，基于 `Map` 插入顺序淘汰最早的条目 |
+| `packages/api/src/github/cache.ts` | `createTtlCache({ ttlMs: 60_000, maxEntries: 500, now })`，基于 `Map` 插入顺序淘汰最早的条目。客户端里搜索和资料共用这一个缓存（key 分别为 `search:<页码>:<关键字小写>`、`user:<用户名小写>`），所以 500 条是两者合计的上限 |
 | `packages/api/src/github/client.ts` | `createGithubClient`、`GithubClient` 类型 |
-| `packages/api/src/github/mapper.ts` | GitHub 资料 → Prisma 写入数据；Prisma 记录 → 接口输出（日期转 ISO 字符串） |
+| `packages/api/src/github/mapper.ts` | `toGithubUserData(profile)`：GitHub 资料 → Prisma 写入数据（只含 GitHub 字段，R04 添加、R08 同步共用）；`toProfileDto(profile)`：GitHub 资料 → `GithubProfileDto`（R03）；`toRecordDto(record)`：Prisma 记录 → `GithubUserRecordDto`（R04～R08）；日期都转成 ISO 字符串。函数名和 DTO 类型名与 R03～R08 的 design.md 保持一致 |
+| `packages/db/src/index.ts` | 增加 `export type { GithubUser }`（生成的 Prisma 记录类型），供 mapper 给 `toRecordDto` 的参数定类型；`exports` 只暴露 `src/*`，api 无法直接导入 `prisma/generated` |
 | `packages/api/src/context.ts` | `Context` 增加 `github: GithubClient` |
 | `packages/api/src/routers/github-user.ts` | `export const githubUserRouter = router({})`，接口在 R02～R10 中逐个加入 |
 | `packages/api/src/routers/index.ts` | `githubUser: githubUserRouter` |
 | `apps/server/.env.schema` | `# @optional @sensitive` `GITHUB_TOKEN=`，注释写明「只读公开资料，不需要勾选权限；强烈建议配置，否则搜索每分钟 10 次、资料每小时 60 次」；随后 `pnpm run env:generate` |
 | `apps/server/src/services.ts` | `export const github = createGithubClient({ token: ENV.GITHUB_TOKEN })` |
 | `apps/server/src/context.ts` | 返回 `{ db, github, session }` |
-| `apps/web/src/lib/app-error.ts` | `getAppCode(error)`、`getAppErrorMessage(error, scene)`、`formatResetTime(resetAt, withSeconds)` |
-| `apps/web/src/utils/trpc.ts` | 全局 `QueryCache.onError` 遇到 `query.meta?.skipGlobalErrorToast` 时不弹 toast |
+| `apps/web/src/lib/app-error.ts` | `getAppCode(error)`、`getResetAt(error)`、`getAppErrorMessage(error, scene = "default")`（`scene`: `"default" \| "sync"`，没有业务错误码时用 `error.message`）、`formatResetTime(resetAt, withSeconds)`；`AppCode` 只做类型导入；限流但缺少 `resetAt` 时提示「…过于频繁，请稍后重试」 |
+| `apps/web/src/utils/trpc.ts` | 通过 `Register.queryMeta` 声明 `skipGlobalErrorToast?: boolean`；全局 `QueryCache.onError` 遇到 `query.meta?.skipGlobalErrorToast` 时不弹 toast，否则用 `getAppErrorMessage(error)` 弹中文提示；顺带修掉该文件原有的 3 个 lint 问题（正则提到顶层、去掉非空断言、`fetch` 改箭头函数） |
 | 测试文件 | `packages/api/src/test-database.test.ts`（测试库冒烟：连的是 `_test` 库、迁移已执行、清表生效、拒绝非测试库）、`packages/api/src/github/client.test.ts`、`cache.test.ts`、`schemas.test.ts`、`packages/api/src/errors.test.ts` |
 
 ## 数据模型

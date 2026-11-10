@@ -1,10 +1,10 @@
 import type { Context as ApiContext } from "@zyk-aws-admin/api/context";
 import type { Context as HonoContext } from "hono";
-import { auth, db } from "./services";
+import { auth, db, github } from "./services";
 
-export type CreateContextOptions = {
+export interface CreateContextOptions {
 	context: HonoContext;
-};
+}
 
 export async function createContext({
 	context,
@@ -14,6 +14,7 @@ export async function createContext({
 	});
 	return {
 		db,
+		github,
 		session,
 	};
 }

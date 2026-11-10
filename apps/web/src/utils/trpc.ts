@@ -8,6 +8,21 @@ import { createTRPCContext } from "@trpc/tanstack-react-query";
 import type { AppRouter } from "@zyk-aws-admin/api/routers/index";
 import { toast } from "sonner";
 
+import { getAppErrorMessage } from "@/lib/app-error";
+
+const TRAILING_SLASH = /\/$/;
+
+/** 查询的 meta：skipGlobalErrorToast 为 true 时错误在页面内展示，不弹全局 toast */
+type AppQueryMeta = Record<string, unknown> & {
+	skipGlobalErrorToast?: boolean;
+};
+
+declare module "@tanstack/react-query" {
+	interface Register {
+		queryMeta: AppQueryMeta;
+	}
+}
+
 export const { TRPCProvider, useTRPC, useTRPCClient } =
 	createTRPCContext<AppRouter>();
 
@@ -15,7 +30,10 @@ function makeQueryClient() {
 	return new QueryClient({
 		queryCache: new QueryCache({
 			onError: (error, query) => {
-				toast.error(error.message, {
+				if (query.meta?.skipGlobalErrorToast) {
+					return;
+				}
+				toast.error(getAppErrorMessage(error), {
 					action: {
 						label: "retry",
 						onClick: () => {
@@ -43,13 +61,12 @@ export function makeTRPCClient() {
 	return createTRPCClient<AppRouter>({
 		links: [
 			httpBatchLink({
-				fetch(url, options) {
-					return fetch(url, {
+				fetch: (url, options) =>
+					fetch(url, {
 						...options,
 						credentials: "include",
-					});
-				},
-				url: `${process.env.NEXT_PUBLIC_SERVER_URL!.replace(/\/$/, "")}/trpc`,
+					}),
+				url: `${(process.env.NEXT_PUBLIC_SERVER_URL ?? "").replace(TRAILING_SLASH, "")}/trpc`,
 			}),
 		],
 	});
