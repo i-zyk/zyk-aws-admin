@@ -1,0 +1,96 @@
+// 前后端共用的校验规则和 GitHub 响应定义。
+// apps/web 会在运行时导入本文件（requirements.md「已确认决策」D2），
+// 所以这里只能依赖 zod，不得导入 db、auth、tRPC 等服务端代码。
+import z from "zod";
+
+/** 用户名：1~39 位，只含字母、数字和 -，不以 - 开头或结尾，没有连续两个 - */
+const GITHUB_USERNAME_PATTERN = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i;
+
+export const SEARCH_KEYWORD_MAX_LENGTH = 100;
+export const REMARK_MAX_LENGTH = 500;
+export const TAGS_MAX_COUNT = 10;
+export const TAG_MAX_LENGTH = 20;
+
+export const githubUsernameSchema = z
+	.string()
+	.trim()
+	.regex(GITHUB_USERNAME_PATTERN, "用户名格式不正确");
+
+export const searchKeywordSchema = z
+	.string()
+	.trim()
+	.min(1, "请输入搜索关键字")
+	.max(
+		SEARCH_KEYWORD_MAX_LENGTH,
+		`关键字最多 ${SEARCH_KEYWORD_MAX_LENGTH} 个字符`
+	);
+
+/** 备注：去掉首尾空格，最多 500 个字符；空字符串和 null 都存为 null */
+export const remarkSchema = z
+	.string()
+	.trim()
+	.max(REMARK_MAX_LENGTH, `备注最多 ${REMARK_MAX_LENGTH} 个字符`)
+	.nullable()
+	.transform((remark) => (remark === "" ? null : remark));
+
+const uniqueNonEmpty = (tags: string[]): string[] =>
+	Array.from(new Set(tags.filter((tag) => tag !== "")));
+
+/** 标签：每个去掉首尾空格、去掉空的、去重，之后最多 10 个，每个最多 20 个字符 */
+export const tagsSchema = z
+	.array(
+		z
+			.string()
+			.trim()
+			.max(TAG_MAX_LENGTH, `每个标签最多 ${TAG_MAX_LENGTH} 个字符`)
+	)
+	.transform(uniqueNonEmpty)
+	.pipe(
+		z.array(z.string()).max(TAGS_MAX_COUNT, `标签最多 ${TAGS_MAX_COUNT} 个`)
+	);
+
+// ---- GitHub 响应（只保留需要的字段，其余字段由 zod 默认丢弃） ----
+
+const githubIdSchema = z.int().positive();
+const githubCountSchema = z.int().nonnegative();
+/** GitHub 对空字段可能返回 null，也可能不返回，统一成 null */
+const githubOptionalTextSchema = z
+	.string()
+	.nullish()
+	.transform((value) => value ?? null);
+
+export const githubSearchItemSchema = z.object({
+	avatar_url: z.string(),
+	html_url: z.string(),
+	id: githubIdSchema,
+	login: z.string(),
+});
+
+export const githubSearchResponseSchema = z.object({
+	items: z.array(githubSearchItemSchema),
+	total_count: githubCountSchema,
+});
+
+export const githubUserResponseSchema = z.object({
+	avatar_url: z.string(),
+	bio: githubOptionalTextSchema,
+	blog: githubOptionalTextSchema,
+	company: githubOptionalTextSchema,
+	created_at: z.iso.datetime({ offset: true }),
+	email: githubOptionalTextSchema,
+	followers: githubCountSchema,
+	following: githubCountSchema,
+	html_url: z.string(),
+	id: githubIdSchema,
+	location: githubOptionalTextSchema,
+	login: z.string(),
+	name: githubOptionalTextSchema,
+	public_gists: githubCountSchema,
+	public_repos: githubCountSchema,
+	twitter_username: githubOptionalTextSchema,
+	updated_at: z.iso.datetime({ offset: true }),
+});
+
+export type GithubSearchItem = z.infer<typeof githubSearchItemSchema>;
+export type GithubSearchResponse = z.infer<typeof githubSearchResponseSchema>;
+export type GithubProfile = z.infer<typeof githubUserResponseSchema>;

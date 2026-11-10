@@ -6,17 +6,20 @@
   - 说明：新建 `packages/db/prisma/schema/github-user.prisma`（PRD 第 5 节原样）；按 requirements.md「已确认决策」D1 准备数据库：在同一 PostgreSQL 实例上新建 `zyk_aws_admin`，把 `apps/server/.env` 里 `DATABASE_URL` 的库名改成 `zyk_aws_admin`（只改库名，不提交 `.env`，旧库 `postgres` 不做任何写操作）；然后执行 `pnpm run db:migrate`（迁移名 `init`，同时包含 auth 表和 `github_user` 表），再执行 `pnpm run db:generate`；确认 `auth.prisma` 无改动
   - 对应验收标准：R00-AC1
   - 测试：`cd packages/db && npx prisma validate && npx prisma migrate status && npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code && pnpm run check-types`，`pnpm run db:generate`，通过（第 1 轮）
-- [ ] 2. 引入 Vitest 和测试库
-  - [ ] 2.1 `pnpm-workspace.yaml` 的 catalog 加 `vitest`；`packages/api` 加 devDependency 和 `"test": "vitest run"`；根 `package.json` 加 `"test": "turbo run test"`；`turbo.json` 加 `test` 任务
-  - [ ] 2.2 新建 `packages/db/src/testing.ts`：推导 `<库名>_test` 地址（即 `zyk_aws_admin_test`）、不存在时建库、执行 `prisma migrate deploy`、提供 `createTestDatabase()` 和 `resetTestDatabase()`
-  - [ ] 2.3 新建 `packages/api/vitest.config.ts`，`globalSetup` 调用 2.2 的准备逻辑
+- [✅] 2. 引入 Vitest 和测试库
+  - [✅] 2.1 `pnpm-workspace.yaml` 的 catalog 加 `vitest`；`packages/api` 加 devDependency 和 `"test": "vitest run"`；根 `package.json` 加 `"test": "turbo run test"`；`turbo.json` 加 `test` 任务
+  - [✅] 2.2 新建 `packages/db/src/testing.ts`：推导 `<库名>_test` 地址（即 `zyk_aws_admin_test`）、不存在时建库、执行 `prisma migrate deploy`、提供 `createTestDatabase()` 和 `resetTestDatabase()`
+  - [✅] 2.3 新建 `packages/api/vitest.config.ts`，`globalSetup` 调用 2.2 的准备逻辑
   - 对应验收标准：R00-AC2
-- [ ] 3. 共享校验规则 `packages/api/src/github/schemas.ts`
+  - 测试：`pnpm run test`（turbo → packages/api `varlock run --path ../db/ -- vitest run`，src/test-database.test.ts 5 个用例），`pnpm exec turbo run check-types --filter=@zyk-aws-admin/api --filter=@zyk-aws-admin/db`，`pnpm exec ultracite check`（本批改动文件），通过（第 1 轮）
+- [✅] 3. 共享校验规则 `packages/api/src/github/schemas.ts`
   - 说明：用户名、搜索关键字、备注、标签规则；GitHub 搜索响应、用户资料响应的 Zod 定义（只保留需要的字段）。文件只依赖 `zod`；web 通过 `@zyk-aws-admin/api/github/schemas` 运行时导入（现有 `exports` 的 `./*` 已覆盖，这是 web 唯一允许运行时导入的 api 文件，见 requirements.md「已确认决策」D2）
   - 对应验收标准：R00-AC10
-- [ ] 4. 错误码和 `errorFormatter`
+  - 测试：`pnpm run test`（packages/api 现有 5 个用例；schemas 的单元测试在任务 8.3），`pnpm exec turbo run check-types --filter=@zyk-aws-admin/api`，`pnpm exec ultracite check packages/api/src/github/schemas.ts`，另用 `node --experimental-strip-types` 临时脚本冒烟验证用户名/关键字边界、备注/标签归一化、GitHub 响应解析 22 项，通过（第 1 轮）
+- [✅] 4. 错误码和 `errorFormatter`
   - 说明：新建 `packages/api/src/errors.ts`（`AppCode`、`AppErrorCause`、`appError()`）；`packages/api/src/index.ts` 的 `create()` 加 `errorFormatter`
   - 对应验收标准：R00-AC11
+  - 测试：`pnpm run test`（packages/api 现有 5 个用例），`pnpm exec turbo run check-types --filter=...@zyk-aws-admin/api`（api 及依赖方 server/web/native 共 7 个任务），`pnpm exec ultracite check packages/api/src/errors.ts packages/api/src/index.ts`，另用临时 vitest 用例（`createCallerFactory` + `getErrorShape`）冒烟验证 `appError` 格式化后 `data.appCode`/`data.resetAt` 正确、普通错误两者为 `null`，用后已删除（正式用例在任务 8.4），通过（第 1 轮）
 - [ ] 5. GitHub 客户端
   - [ ] 5.1 `packages/api/src/github/cache.ts`：60 秒 TTL、最多 500 条、淘汰最早条目，可注入 `now`
   - [ ] 5.2 `packages/api/src/github/client.ts`：请求头、token、10 秒超时、状态码映射、Zod 校验、缓存策略（`searchUsers`/`getUserByLogin` 默认缓存，`getUserByLogin(…, { cache: false })` 和 `getUserById` 不走缓存）
@@ -39,3 +42,4 @@
   - 对应验收标准：R00-AC1 ~ R00-AC14
 
 - CR（2026-11-10）：Codex 提出 0 条，采纳 0 条；不采纳：无
+- CR（2026-11-10）：Codex 提出 0 条，采纳 0 条；不采纳：无（Codex 未发现可操作问题；其注明的数据库集成测试未运行属审查说明，非问题，交 W6R 回归测试覆盖）

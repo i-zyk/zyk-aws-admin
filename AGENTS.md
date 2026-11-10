@@ -236,3 +236,8 @@ Biome will catch most mechanical issues automatically. Focus your attention on:
 ---
 
 Most formatting and common issues are automatically fixed by Biome. Run `pnpm exec ultracite fix` before committing to ensure compliance.
+
+## 经验与踩坑
+
+- [2026-11-10][R00] 测试进程本身拿不到 `DATABASE_URL`；`packages/api` 的 `test` 脚本用 `varlock run --path ../db/ -- vitest run` 从 `packages/db` 加载环境变量，新增需要数据库的测试包照此写。
+- [2026-11-10][R00] 测试一律走 `zyk_aws_admin_test` 测试库：`globalSetup` 建库并 `prisma migrate deploy`，`setupFiles` 把 `DATABASE_URL` 改指向测试库；`packages/db/src/testing.ts` 拒绝对非 `_test` 结尾的库操作，只能在测试中导入，业务代码不要用。

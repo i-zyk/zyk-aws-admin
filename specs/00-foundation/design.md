@@ -35,12 +35,14 @@
 | `turbo.json` | 增加 `test` 任务（依赖数据库，`cache: false`）；`globalEnv` 增加 `GITHUB_TOKEN` |
 | `packages/db/prisma/schema/github-user.prisma` | 新增 `GithubUser` 模型（PRD 第 5 节原样） |
 | `packages/db/prisma/migrations/<时间戳>_<名称>/migration.sql` | `db:migrate` 生成 |
-| `packages/db/src/testing.ts` | 测试用：根据 `DATABASE_URL` 推出测试库地址（库名加 `_test` 后缀，即 `zyk_aws_admin_test`），不存在就创建，执行 `prisma migrate deploy`；导出 `createTestDatabase()`、`resetTestDatabase(db)`（清空 `github_user` 和 auth 表） |
-| `packages/api/package.json` | 增加 `vitest`（dev）、`test` 脚本（现有 `exports` 的 `./*` → `./src/*.ts` 已覆盖 `./github/schemas`，不用另加） |
-| `packages/api/vitest.config.ts` | `globalSetup` 调用测试库准备逻辑；`environment: "node"` |
+| `packages/db/src/testing.ts` | 测试用（业务代码不导入）：`getTestDatabaseUrl(url)` 把库名改成 `<库名>_test`（即 `zyk_aws_admin_test`），其余不变；`prepareTestDatabase(url)` 连到配置的开发库执行集群级的 `CREATE DATABASE`（不存在时，不读写开发库的表），再以测试库地址执行 `prisma migrate deploy`；`createTestDatabase(url = process.env.DATABASE_URL)` 返回测试库的 Prisma 客户端；`resetTestDatabase(db)` 清空 public 下除 `_prisma_migrations` 外的所有表（含 `github_user` 和 auth 表，`RESTART IDENTITY CASCADE`）。后两者发现库名不以 `_test` 结尾时直接报错 |
+| `packages/api/package.json` | 增加 `vitest`（dev）、`"test": "varlock run --path ../db/ -- vitest run"`（用 db 包的 `.env.schema` 注入 `DATABASE_URL`，varlock 用根目录已有的；现有 `exports` 的 `./*` → `./src/*.ts` 已覆盖 `./github/schemas`，不用另加） |
+| `packages/api/vitest.config.ts` | `environment: "node"`、`include: src/**/*.test.ts`、`globalSetup`、`setupFiles`；配置文件本身不导入工作区包（Vitest 用原生 Node 加载配置，无法解析工作区里不带扩展名的 TS 导入） |
+| `packages/api/vitest.global-setup.ts` | 调用 `prepareTestDatabase(process.env.DATABASE_URL)`，用 `project.provide("testDatabaseUrl", …)` 把测试库地址交给测试进程 |
+| `packages/api/vitest.setup.ts` | `process.env.DATABASE_URL = inject("testDatabaseUrl")`，测试进程里的 `DATABASE_URL` 一律指向测试库 |
 | `packages/api/src/errors.ts` | `AppCode` 常量、`AppErrorCause` 类、`appError(code, appCode, extra?)` |
 | `packages/api/src/index.ts` | `initTRPC.context<Context>().create({ errorFormatter })` |
-| `packages/api/src/github/schemas.ts` | `githubUsernameSchema`、`searchKeywordSchema`、`remarkSchema`、`tagsSchema`，以及 `githubSearchResponseSchema`、`githubUserResponseSchema` |
+| `packages/api/src/github/schemas.ts` | `githubUsernameSchema`、`searchKeywordSchema`、`remarkSchema`、`tagsSchema`，以及 `githubSearchItemSchema`、`githubSearchResponseSchema`、`githubUserResponseSchema`（保留 GitHub 原始的 snake_case 字段名，可空文本字段缺失或为 null 时统一成 null，日期保持 ISO 字符串，由 mapper 转换）；导出类型 `GithubSearchItem`、`GithubSearchResponse`、`GithubProfile` 和长度上限常量 |
 | `packages/api/src/github/cache.ts` | `createTtlCache({ ttlMs: 60_000, maxEntries: 500, now })`，基于 `Map` 插入顺序淘汰最早的条目 |
 | `packages/api/src/github/client.ts` | `createGithubClient`、`GithubClient` 类型 |
 | `packages/api/src/github/mapper.ts` | GitHub 资料 → Prisma 写入数据；Prisma 记录 → 接口输出（日期转 ISO 字符串） |
@@ -52,7 +54,7 @@
 | `apps/server/src/context.ts` | 返回 `{ db, github, session }` |
 | `apps/web/src/lib/app-error.ts` | `getAppCode(error)`、`getAppErrorMessage(error, scene)`、`formatResetTime(resetAt, withSeconds)` |
 | `apps/web/src/utils/trpc.ts` | 全局 `QueryCache.onError` 遇到 `query.meta?.skipGlobalErrorToast` 时不弹 toast |
-| 测试文件 | `packages/api/src/github/client.test.ts`、`cache.test.ts`、`schemas.test.ts`、`packages/api/src/errors.test.ts` |
+| 测试文件 | `packages/api/src/test-database.test.ts`（测试库冒烟：连的是 `_test` 库、迁移已执行、清表生效、拒绝非测试库）、`packages/api/src/github/client.test.ts`、`cache.test.ts`、`schemas.test.ts`、`packages/api/src/errors.test.ts` |
 
 ## 数据模型
 
