@@ -85,7 +85,7 @@ sequenceDiagram
 - 总数 > 1000：在总数旁提示「结果太多，请输入更具体的关键字」，第 100 页时「下一页」禁用。
 - 精确匹配的人不在当前页：不跨页提升，PRD 只要求「本页第一位」。
 - GitHub 返回的 `incomplete_results: true`：忽略，按返回内容展示（技术参考未规定，暂按此）。
-- 关键字含 `type:org` 等 GitHub 限定符：原样传给 GitHub，追加的 `type:user` 仍生效；不合法时 GitHub 返回 422 → `GITHUB_SEARCH_INVALID`。
+- 关键字含 `type:org` 等 GitHub 限定符：固定的 `type:user` 放在用户输入前，保留原始关键字；实测 GitHub 重复 type 限定符采用第一个，原设计的末尾追加会被用户输入覆盖。此修正保持 AC10 只搜索个人账号的要求；不合法时 GitHub 返回 422 → `GITHUB_SEARCH_INVALID`。
 - 限流提示中的时间：`resetAt` 按浏览器本地时区格式化为 `HH:mm:ss`。
 
 ## 风险与取舍

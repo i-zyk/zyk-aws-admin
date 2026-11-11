@@ -17,8 +17,8 @@ const GITHUB_API_VERSION = "2022-11-28";
 const GITHUB_USER_AGENT = "zyk-aws-admin";
 const GITHUB_REQUEST_TIMEOUT_MS = 10_000;
 const SEARCH_PER_PAGE = 10;
-/** 搜索只要个人账号，不要组织 */
-const SEARCH_TYPE_QUALIFIER = " type:user";
+/** GitHub 重复 type 限定符采用第一个，固定个人账号约束必须放在用户输入前。 */
+const SEARCH_TYPE_QUALIFIER = "type:user";
 
 export const GITHUB_CACHE_TTL_MS = 60_000;
 export const GITHUB_CACHE_MAX_ENTRIES = 500;
@@ -222,7 +222,7 @@ export const createGithubClient = ({
 				page: String(page),
 				per_page: String(SEARCH_PER_PAGE),
 			});
-			const query = encodeURIComponent(`${q}${SEARCH_TYPE_QUALIFIER}`);
+			const query = encodeURIComponent(`${SEARCH_TYPE_QUALIFIER} ${q}`);
 			const response = await request(
 				`/search/users?q=${query}&${params.toString()}`,
 				"search",

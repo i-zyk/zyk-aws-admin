@@ -20,15 +20,19 @@
   - [✅] 3.4 总数、「上一页」「下一页」、超过 1000 的提示；加载中、空结果、错误（用 `app-error.ts` 的提示）三种状态
     - 测试：浏览器模拟空结果、限流、不可用、5000 总数和第 100 页；限流显示 13:34:56 且无重复 toast；延迟请求时搜索中按钮禁用、显示加载区；分页和返回结果通过（第 2 轮）。
   - 对应验收标准：R02-AC1、R02-AC2、R02-AC3、R02-AC4、R02-AC5、R02-AC6、R02-AC7、R02-AC8、R02-AC9、R02-AC11、R02-AC12
-- [ ] 4. 占位列表页加「添加用户」入口
+- [✅] 4. 占位列表页加「添加用户」入口
   - 说明：`apps/web/src/app/github-users/page.tsx` 加链接到 `/github-users/new`
+  - 测试：该文件 Ultracite 检查、web 类型检查通过；agent-browser 从名单页点击添加用户后到 `/github-users/new`，显示搜索关键字输入框，通过（第 1 轮）。
   - 对应验收标准：R02-AC1
-- [ ] 5. 编写测试（`github-user.search.test.ts`，测试库 + 模拟的 `GithubClient`）
+- [✅] 5. 编写测试（`github-user.search.test.ts`，测试库 + 模拟的 `GithubClient`）
   - 说明：未登录 `UNAUTHORIZED`；关键字为空格、101 个字符返回 `BAD_REQUEST`；`page` 为 0、101、小数返回 `BAD_REQUEST`；关键字带首尾空格时传给客户端的是去掉空格后的值；精确匹配（大小写不同）置顶且 `exactMatch: true`，其余顺序不变；数据库里已有的 `githubId` 得到对应 `savedId`，其他为 `null`；`hasMore` 在 total=25/page=2、total=25/page=3、total=5000/page=100 时分别为 true/false/false；客户端抛 `GITHUB_SEARCH_RATE_LIMITED`、`GITHUB_SEARCH_INVALID`、`GITHUB_UNAVAILABLE` 时原样透传；调用后 `github_user` 表行数不变
   - 对应验收标准：R02-AC2、R02-AC3、R02-AC5、R02-AC6、R02-AC8、R02-AC10、R02-AC12
-- [ ] 6. 自测并对照 requirements.md 逐条验收
+  - 测试：核对任务 1 提前编写的 15 项搜索用例覆盖任务列出的全部场景；`pnpm -F @zyk-aws-admin/api run test src/routers/github-user.search.test.ts src/routers/protected.test.ts`（18 项）和这两个文件的 Ultracite 检查通过（第 1 轮）。
+- [✅] 6. 自测并对照 requirements.md 逐条验收
   - 说明：浏览器中验证 `linus`、`torvalds` 搜索结果和耗时；空/超长关键字不发请求（看 Network）；翻页和从预览返回后 URL 与结果保持；输入时不发请求、60 秒内同一搜索不再请求 GitHub（看 server 日志）；可以用模拟的 GitHub 响应或临时去掉 token 验证限流提示；`pnpm run check`、`pnpm run check-types` 通过
   - 对应验收标准：R02-AC1 ~ R02-AC12
+  - 测试：任务 3 的真实搜索与浏览器模拟覆盖全部界面状态；补测回车提交、URL page=101 回退第一页、入口跳转；完整 API 测试 141 项和全仓类型检查通过，当前 3 个改动源码 lint 通过（第 2 轮：发现类型限定符优先级问题，前置固定 type:user 后通过）。
+  - AC10 补充：真实 GitHub API 在 `type:org type:user` 时返回 Organization，在 `type:user type:org` 时返回 User；修正固定约束位置，并增加模拟该上游行为的回归用例；通过实际 GithubClient 调用 q=type:org，10 条原始响应的 type 全为 User，搜索结果不写库。技术示例同步到 PRD 和基础设施 design，业务要求未改变。
 
 ## 续跑记录（2026-11-11，W6 暂停）
 
@@ -46,3 +50,7 @@
 - CR 部分提交点（2026-11-11）：Codex 提出 2 条，采纳 2 条：头像启用 keepMounted，由实际 Next Image 驱动加载与回退，避免生产原图预加载；空分页保留总数与返回第一页入口，避免误判没有匹配用户。修复后回归，不复审。
 
 - 部分提交点回归（2026-11-11，第 1 轮）：`pnpm run test`（api 140 + auth 7）和 `pnpm run check-types`（7 个任务）通过；agent-browser 对 window.Image 构造计数为 0，真实头像正常加载；阻断图片请求后显示 FA 回退；模拟 total=15、page=100、items=[]，显示当前页没有结果与总数，点击返回第一页后 URL 为 page=1；本提交点 13 个 TS/TSX 文件 lint 通过，Next MCP 无编译或运行时错误。
+
+- CR 完成提交点（2026-11-11）：Codex 提出 0 条，采纳 0 条；无待修复项。
+
+- 完成提交点回归（2026-11-11，第 1 轮）：`pnpm run test` 148 项通过、`pnpm run check-types` 7 个任务通过，3 个源码文件 Ultracite 检查通过；上一页返回第一页与回车搜索实测通过；Next MCP 无编译或运行时错误。全部任务与验收标准通过，R02 完成。

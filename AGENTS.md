@@ -251,3 +251,5 @@ Most formatting and common issues are automatically fixed by Biome. Run `pnpm ex
 - [2026-11-11][R02] 本机 Fake-IP 导致 GitHub 头像解析为 198.18 地址，Next 图片优化会拒绝；用户确认仅 `GithubAvatar` 在 development 使用 `unoptimized`，生产仍优化，GitHub API 仍走服务端。
 - [2026-11-11][R02] `.next/types` 的旧构建路由类型与 `.next/dev/types` 不一致时会让已存在路由的 typedRoutes 校验失败；运行 `pnpm -F web exec next typegen` 重新生成，保留正在运行的 `.next/dev`。
 - [2026-11-11][R02] Base UI AvatarImage 搭配 Next Image 时使用 `keepMounted`，让实际 img 的 load/error 驱动状态；默认模式会先下载原始 src，导致生产原图和优化图重复加载。加载/错误时隐藏实际图并保留 AvatarFallback。
+- [2026-11-11][R02] GitHub 用户搜索重复 type 限定符时实测采用第一个；固定 `type:user` 必须放在用户关键字之前，末尾追加会被输入 type:org 覆盖。已增加回归测试，并同步 PRD/技术设计中的 URL 示例。
+- [2026-11-11][R02] agent-browser 的 find/fill 会给元素添加 data-agent-browser-located；在 SSR 表单尚未水合时操作会引入工具造成的 hydration 警告。先用不改 DOM 的 wait --fn 等待查询结果/图片就绪，再操作；重开浏览器后 Next MCP 无错误。

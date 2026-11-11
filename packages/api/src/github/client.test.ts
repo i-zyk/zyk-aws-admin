@@ -10,6 +10,7 @@ const MS_PER_SECOND = 1000;
 const DEFAULT_RETRY_MS = 60_000;
 const RETRY_AFTER_SECONDS = 30;
 const TOKEN = "ghp_test_token";
+const FIRST_TYPE_QUALIFIER = /(?:^|\s)type:(user|org)\b/i;
 
 const searchBody = {
 	incomplete_results: false,
@@ -167,9 +168,32 @@ describe("请求", () => {
 		const { url } = getRequest(fakeFetch);
 		expect(url.origin).toBe("https://api.github.com");
 		expect(url.pathname).toBe("/search/users");
-		expect(url.searchParams.get("q")).toBe("octo cat type:user");
+		expect(url.searchParams.get("q")).toBe("type:user octo cat");
 		expect(url.searchParams.get("per_page")).toBe("10");
 		expect(url.searchParams.get("page")).toBe("3");
+	});
+
+	it("输入组织限定符时仍只搜索个人账号", async () => {
+		// 按真实 GitHub API 的行为模拟：重复 type 限定符采用第一个。
+		const fakeFetch = vi.fn<typeof fetch>((input) => {
+			const query = new URL(String(input)).searchParams.get("q") ?? "";
+			const organization = FIRST_TYPE_QUALIFIER.exec(query)?.[1] === "org";
+			return Promise.resolve(
+				jsonResponse({
+					...searchBody,
+					items: [
+						{
+							...searchBody.items[0],
+							login: organization ? "github" : "octocat",
+							type: organization ? "Organization" : "User",
+						},
+					],
+				})
+			);
+		});
+		const client = createGithubClient({ fetch: fakeFetch });
+		const result = await client.searchUsers({ page: 1, q: "type:org" });
+		expect(result.items.map((user) => user.login)).toEqual(["octocat"]);
 	});
 
 	it("资料查询的路径分别是 /users/{login} 和 /user/{id}", async () => {

@@ -8,6 +8,14 @@ export default async function GithubUsersPage() {
 		<div className="container mx-auto max-w-3xl px-4 py-6">
 			<h1 className="font-bold text-2xl">GitHub 用户</h1>
 			<p className="mt-2 text-muted-foreground">名单功能开发中。</p>
+			<Link
+				className="mt-4 inline-block underline underline-offset-4"
+				href="/github-users/new"
+			>
+				添加用户
+			</Link>
 		</div>
 	);
 }
+
+import Link from "next/link";

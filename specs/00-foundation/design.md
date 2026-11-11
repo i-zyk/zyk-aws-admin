@@ -122,7 +122,7 @@ type GithubClient = {
 };
 ```
 
-- 搜索：`GET https://api.github.com/search/users?q=<encodeURIComponent(关键字 + " type:user")>&per_page=10&page=<页码>`
+- 搜索：`GET https://api.github.com/search/users?q=<encodeURIComponent("type:user " + 关键字)>&per_page=10&page=<页码>`
 - 资料：`GET /users/{encodeURIComponent(login)}`、`GET /user/{id}`
 - 超时：`signal: AbortSignal.timeout(10_000)`
 
