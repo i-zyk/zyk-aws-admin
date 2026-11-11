@@ -5,10 +5,7 @@ import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 
 export default function Header() {
-	const links = [
-		{ label: "Home", to: "/" },
-		{ label: "Dashboard", to: "/dashboard" },
-	] as const;
+	const links = [{ label: "GitHub 用户", to: "/github-users" }] as const;
 
 	return (
 		<div>

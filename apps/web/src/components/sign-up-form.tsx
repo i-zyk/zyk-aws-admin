@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
+import { getAuthErrorMessage } from "@/lib/auth-error";
 
 import Loader from "./loader";
 
@@ -33,20 +34,20 @@ export default function SignUpForm({
 				},
 				{
 					onError: (error) => {
-						toast.error(error.error.message || error.error.statusText);
+						toast.error(getAuthErrorMessage(error.error));
 					},
 					onSuccess: () => {
-						router.push("/dashboard");
-						toast.success("Sign up successful");
+						router.push("/github-users");
+						toast.success("注册成功");
 					},
 				}
 			);
 		},
 		validators: {
 			onSubmit: z.object({
-				email: z.email("Invalid email address"),
-				name: z.string().min(2, "Name must be at least 2 characters"),
-				password: z.string().min(8, "Password must be at least 8 characters"),
+				email: z.email("邮箱格式不正确"),
+				name: z.string().min(2, "姓名至少 2 个字符"),
+				password: z.string().min(8, "密码至少 8 位"),
 			}),
 		},
 	});
@@ -57,7 +58,7 @@ export default function SignUpForm({
 
 	return (
 		<div className="mx-auto mt-10 w-full max-w-md p-6">
-			<h1 className="mb-6 text-center font-bold text-3xl">Create Account</h1>
+			<h1 className="mb-6 text-center font-bold text-3xl">注册账号</h1>
 
 			<form
 				className="space-y-4"
@@ -71,7 +72,7 @@ export default function SignUpForm({
 					<form.Field name="name">
 						{(field) => (
 							<div className="space-y-2">
-								<Label htmlFor={field.name}>Name</Label>
+								<Label htmlFor={field.name}>姓名</Label>
 								<Input
 									id={field.name}
 									name={field.name}
@@ -93,7 +94,7 @@ export default function SignUpForm({
 					<form.Field name="email">
 						{(field) => (
 							<div className="space-y-2">
-								<Label htmlFor={field.name}>Email</Label>
+								<Label htmlFor={field.name}>邮箱</Label>
 								<Input
 									id={field.name}
 									name={field.name}
@@ -116,7 +117,7 @@ export default function SignUpForm({
 					<form.Field name="password">
 						{(field) => (
 							<div className="space-y-2">
-								<Label htmlFor={field.name}>Password</Label>
+								<Label htmlFor={field.name}>密码</Label>
 								<Input
 									id={field.name}
 									name={field.name}
@@ -147,7 +148,7 @@ export default function SignUpForm({
 							disabled={!canSubmit || isSubmitting}
 							type="submit"
 						>
-							{isSubmitting ? "Submitting..." : "Sign Up"}
+							{isSubmitting ? "提交中..." : "注册"}
 						</Button>
 					)}
 				</form.Subscribe>
@@ -159,7 +160,7 @@ export default function SignUpForm({
 					onClick={onSwitchToSignIn}
 					variant="link"
 				>
-					Already have an account? Sign In
+					已有账号？去登录
 				</Button>
 			</div>
 		</div>

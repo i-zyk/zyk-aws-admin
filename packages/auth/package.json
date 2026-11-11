@@ -6,7 +6,8 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "varlock run --path ../db/ -- vitest run"
   },
   "dependencies": {
     "@better-auth/expo": "catalog:",
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "@zyk-aws-admin/config": "workspace:*",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "catalog:"
   }
 }

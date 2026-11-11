@@ -25,7 +25,7 @@ export default function UserMenu() {
 	if (!session) {
 		return (
 			<Link href="/login">
-				<Button variant="outline">Sign In</Button>
+				<Button variant="outline">登录</Button>
 			</Link>
 		);
 	}
@@ -37,7 +37,7 @@ export default function UserMenu() {
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="bg-card">
 				<DropdownMenuGroup>
-					<DropdownMenuLabel>My Account</DropdownMenuLabel>
+					<DropdownMenuLabel>我的账户</DropdownMenuLabel>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem>{session.user.email}</DropdownMenuItem>
 					<DropdownMenuItem
@@ -45,14 +45,15 @@ export default function UserMenu() {
 							authClient.signOut({
 								fetchOptions: {
 									onSuccess: () => {
-										router.push("/");
+										router.push("/login");
+										router.refresh();
 									},
 								},
 							});
 						}}
 						variant="destructive"
 					>
-						Sign Out
+						退出登录
 					</DropdownMenuItem>
 				</DropdownMenuGroup>
 			</DropdownMenuContent>

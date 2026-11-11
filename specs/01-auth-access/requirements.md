@@ -13,15 +13,15 @@
 
 ## 验收标准
 
-- [ ] R01-AC1：新用户用邮箱和密码注册成功后自动登录，并跳转到 `/github-users`。
-- [ ] R01-AC2：用已注册的邮箱再次注册，提示「该邮箱已注册」。
-- [ ] R01-AC3：同一 IP 在 1 分钟内第 6 次请求注册接口（或第 6 次请求登录接口），返回 `429`，前端提示「操作过于频繁，请稍后再试」；开发环境同样生效。
-- [ ] R01-AC4：未登录访问 `/github-users` 及其下任何页面（`/github-users/new`、`/github-users/{id}`），都跳转到 `/login`。
-- [ ] R01-AC5：未登录直接调用 `githubUser.*` 的任何 tRPC 接口，返回 `UNAUTHORIZED`。
-- [ ] R01-AC6：退出登录后，再调用这些接口返回 `UNAUTHORIZED`。
-- [ ] R01-AC7：登录成功后跳转到 `/github-users`；访问 `/` 或 `/dashboard` 时跳转到 `/github-users`（未登录时再由 R01-AC4 跳到 `/login`）。
-- [ ] R01-AC8：顶部导航有「GitHub 用户」入口；右上角显示当前用户，可以退出登录，退出后回到 `/login`。
-- [ ] R01-AC9：注册表单保持密码最少 8 位、邮箱格式校验；README 写明「开放注册：任何注册用户都能修改和删除全部数据并消耗共用的 GitHub 额度，本期用注册限流降低滥用」。
+- [✅] R01-AC1：新用户用邮箱和密码注册成功后自动登录，并跳转到 `/github-users`。
+- [✅] R01-AC2：用已注册的邮箱再次注册，提示「该邮箱已注册」。
+- [✅] R01-AC3：同一 IP 在 1 分钟内第 6 次请求注册接口（或第 6 次请求登录接口），返回 `429`，前端提示「操作过于频繁，请稍后再试」；开发环境同样生效。
+- [✅] R01-AC4：未登录访问 `/github-users` 及其下任何页面（`/github-users/new`、`/github-users/{id}`），都跳转到 `/login`。
+- [✅] R01-AC5：未登录直接调用 `githubUser.*` 的任何 tRPC 接口，返回 `UNAUTHORIZED`。
+- [✅] R01-AC6：退出登录后，再调用这些接口返回 `UNAUTHORIZED`。
+- [✅] R01-AC7：登录成功后跳转到 `/github-users`；访问 `/` 或 `/dashboard` 时跳转到 `/github-users`（未登录时再由 R01-AC4 跳到 `/login`）。
+- [✅] R01-AC8：顶部导航有「GitHub 用户」入口；右上角显示当前用户，可以退出登录，退出后回到 `/login`。
+- [✅] R01-AC9：注册表单保持密码最少 8 位、邮箱格式校验；README 写明「开放注册：任何注册用户都能修改和删除全部数据并消耗共用的 GitHub 额度，本期用注册限流降低滥用」。
 
 ## 不在范围内
 
@@ -36,3 +36,10 @@
 ## 待确认问题
 
 - 无
+
+## 验收记录（2026-11-11）
+
+- AC1、AC2、AC3、AC7、AC8、AC9：任务 2～7 的浏览器与命令留痕覆盖注册自动登录、重复邮箱、429 中文提示、登录与退出、跳转、表单校验和 README；auth 的 7 项自动化测试验证注册、独立限流计数及退出会话失效。
+- AC4：任务 8 实测未登录首次访问和服务端会话失效后的客户端导航，名单、添加、详情均跳 `/login`。
+- AC5、AC6：`protected.test.ts` 遍历全部 `githubUser.*` 和 `privateData` 拦截匿名会话；当前 githubUser router 为空，新增接口自动纳入；auth 测试验证退出后原 Cookie 的会话为 null。
+- 测试：`pnpm run test`（api 124 + auth 7）、`pnpm run check-types` 通过；Next MCP 无编译或运行时错误；lint 遗留范围按任务记录留给 R11，无新增问题。

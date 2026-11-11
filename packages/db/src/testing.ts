@@ -3,6 +3,8 @@
  *
  * 测试库和开发库在同一个 PostgreSQL 实例上，库名为开发库名加 `_test` 后缀
  * （开发库 `zyk_aws_admin` → 测试库 `zyk_aws_admin_test`）。
+ * `turbo run test` 会并行跑多个包的测试，各包清空数据的时机互不知晓，
+ * 因此除 api 外的包传入自己的后缀（如 `_auth_test`），用各自独立的测试库。
  */
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -50,17 +52,30 @@ function requireDatabaseUrl(databaseUrl: string | undefined): string {
 	return databaseUrl;
 }
 
+function requireTestSuffix(suffix: string): string {
+	if (!(isTestDatabaseName(suffix) && DATABASE_NAME_PATTERN.test(suffix))) {
+		throw new Error(
+			`测试库后缀「${suffix}」只能包含字母、数字和下划线，并且必须以 ${TEST_DATABASE_SUFFIX} 结尾`
+		);
+	}
+	return suffix;
+}
+
 /**
- * 根据开发库地址推导测试库地址：只把库名改成 `<库名>_test`，主机、端口、账号、密码、参数不变。
- * 传入的已经是测试库地址时原样返回。
+ * 根据开发库地址推导测试库地址：只把库名改成 `<库名><suffix>`（默认 `<库名>_test`），
+ * 主机、端口、账号、密码、参数不变。库名已经以该后缀结尾时原样返回。
  */
-export function getTestDatabaseUrl(databaseUrl: string): string {
+export function getTestDatabaseUrl(
+	databaseUrl: string,
+	suffix: string = TEST_DATABASE_SUFFIX
+): string {
+	const testSuffix = requireTestSuffix(suffix);
 	const name = getDatabaseName(databaseUrl);
-	if (isTestDatabaseName(name)) {
+	if (name.endsWith(testSuffix)) {
 		return databaseUrl;
 	}
 	const url = new URL(databaseUrl);
-	url.pathname = `/${name}${TEST_DATABASE_SUFFIX}`;
+	url.pathname = `/${name}${testSuffix}`;
 	return url.toString();
 }
 
@@ -94,13 +109,15 @@ function migrateTestDatabase(testDatabaseUrl: string): void {
 
 /**
  * 准备测试库（在 Vitest 的 globalSetup 里调用一次）：
- * 推导测试库地址 → 不存在就创建 → 执行 `prisma migrate deploy`。返回测试库地址。
+ * 推导测试库地址（后缀见 `getTestDatabaseUrl`）→ 不存在就创建 → 执行 `prisma migrate deploy`。
+ * 返回测试库地址。
  */
 export async function prepareTestDatabase(
-	databaseUrl: string | undefined
+	databaseUrl: string | undefined,
+	suffix: string = TEST_DATABASE_SUFFIX
 ): Promise<string> {
 	const sourceUrl = requireDatabaseUrl(databaseUrl);
-	const testDatabaseUrl = getTestDatabaseUrl(sourceUrl);
+	const testDatabaseUrl = getTestDatabaseUrl(sourceUrl, suffix);
 	await ensureDatabaseExists(sourceUrl, getDatabaseName(testDatabaseUrl));
 	migrateTestDatabase(testDatabaseUrl);
 	return testDatabaseUrl;

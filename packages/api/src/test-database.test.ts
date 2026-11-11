@@ -7,6 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 const TEST_DATABASE_NAME_PATTERN = /_test$/;
 const NON_TEST_DATABASE_ERROR_PATTERN = /非测试库/;
+const TEST_SUFFIX_ERROR_PATTERN = /测试库后缀/;
 
 const db = createTestDatabase();
 
@@ -57,6 +58,21 @@ describe("测试库", () => {
 		expect(getTestDatabaseUrl("postgresql://u:p@localhost:5432/app_test")).toBe(
 			"postgresql://u:p@localhost:5432/app_test"
 		);
+	});
+
+	it("getTestDatabaseUrl 可指定以 _test 结尾的后缀，得到独立的测试库", () => {
+		expect(
+			getTestDatabaseUrl("postgresql://u:p@localhost:5432/app", "_auth_test")
+		).toBe("postgresql://u:p@localhost:5432/app_auth_test");
+		expect(
+			getTestDatabaseUrl(
+				"postgresql://u:p@localhost:5432/app_auth_test",
+				"_auth_test"
+			)
+		).toBe("postgresql://u:p@localhost:5432/app_auth_test");
+		expect(() =>
+			getTestDatabaseUrl("postgresql://u:p@localhost:5432/app", "_auth")
+		).toThrow(TEST_SUFFIX_ERROR_PATTERN);
 	});
 
 	it("createTestDatabase 拒绝连接非测试库", () => {

@@ -19,6 +19,14 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **Turborepo** - Optimized monorepo build system
 - **Biome** - Linting and formatting
 
+## 开放注册的风险
+
+开放注册：任何注册用户都能修改和删除全部数据并消耗共用的 GitHub 额度，本期用注册限流降低滥用。
+
+- 任何人都可以用邮箱和密码注册，注册后即为管理员，所有用户权限相同，没有多角色区分。
+- 注册（`/sign-up/email`）和登录（`/sign-in/email`）接口按 IP 限流：各自 60 秒内最多 5 次，第 6 次返回 `429`；开发环境同样生效。
+- 限流计数存在服务进程内存中，重启即清空、多实例之间不共享；生产环境的限流存储和代理后的真实 IP 配置留到部署时再定。
+
 ## Getting Started
 
 First, install the dependencies:

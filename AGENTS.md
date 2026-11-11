@@ -243,3 +243,7 @@ Most formatting and common issues are automatically fixed by Biome. Run `pnpm ex
 - [2026-11-10][R00] 测试一律走 `zyk_aws_admin_test` 测试库：`globalSetup` 建库并 `prisma migrate deploy`，`setupFiles` 把 `DATABASE_URL` 改指向测试库；`packages/db/src/testing.ts` 拒绝对非 `_test` 结尾的库操作，只能在测试中导入，业务代码不要用。
 - [2026-11-10][R00] 新增服务端环境变量要三处同步：`apps/server/.env.schema` 声明（敏感项标 sensitive）→ `pnpm run env:generate` 重新生成 `apps/server/src/env.ts` → `turbo.json` 的 `globalEnv` 加上变量名；`GITHUB_TOKEN` 只在服务端，web/native 不得出现。
 - [2026-11-10][R00] 检查迁移与 schema 是否一致用 `cd packages/db && varlock run -- npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code`（输出 No difference 即一致），再配合 `prisma migrate status`；全仓 lint 有基线遗留错误（由 R11 清理），各需求只对自己改动的文件跑 `pnpm exec ultracite check <文件...>`。
+- [2026-11-10][R01] web 开了 typedRoutes，`router.push("/xxx")` 指向的路由必须已有 `page.tsx`，否则 check-types 报错；跳转到还没实现的页面时先建占位 `page.tsx`。
+- [2026-11-10][R01] turbo 会并行跑各包的 `test`，多个包共用一个测试库会互相干扰；每个需要数据库的测试包在 `globalSetup` 里给 `getTestDatabaseUrl` 传自己的后缀（如 auth 用 `_auth_test`），各用独立测试库。
+- [2026-11-10][R01] 不存在的 Next.js 子路由直接渲染根 404，不经过其父目录的受保护 layout；验收未来页面的登录跳转前先建占位 page，R01 已为 new 和 [id] 建好占位页。
+- [2026-11-11][R01] Next.js 共享布局在客户端导航时会复用，不能只在 layout 中鉴权；所有后台 page 在渲染前调用 `@/lib/require-session` 的 `requireSession()`（React cache 仅请求内去重），R02/R05/R06 替换占位页时必须保留。
