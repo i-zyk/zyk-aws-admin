@@ -92,3 +92,13 @@ sequenceDiagram
 
 - 搜索额度极少且所有用户共享：靠按钮触发 + 服务端 60 秒缓存 + 前端 `staleTime` + 关闭重试来节省。
 - 新增 shadcn 组件 `avatar`、`badge`：PRD 6.4 已列出，属于 `packages/ui` 内的源码组件，不新增 npm 依赖（如果 shadcn 生成的组件引入了新依赖，在 W4 时暂停确认）。
+
+## 实现补充
+
+- 2026-11-11：API 包新增数据库测试文件后，Vitest 设为 `fileParallelism: false`，避免多个文件同时 reset 共用测试库；包之间仍使用各自测试库。
+- 搜索表单与反馈复用 shadcn Field/Alert/Separator 源码；生成时保留已有 Label，不新增依赖。GithubAvatar 监听 Next Image 优化图的实际加载错误，失败时显示用户名缩写。
+- URL 构造和页码解析放在 `new/search-params.ts`；旧生产构建的路由类型与开发类型可能不一致，使用 `pnpm -F web exec next typegen` 重新生成。
+
+## 已确认决策（2026-11-11）
+
+- 用户同意：仅 `GithubAvatar` 的 Next Image 在 `NODE_ENV === "development"` 时设置 `unoptimized`，绕过本机 Fake-IP 与服务端图片优化的冲突；生产仍使用默认优化，代理/DNS 与私网保护配置不改。开发时浏览器直接加载公开头像图片；GitHub API 请求仍全部由服务端发起（AC10）。

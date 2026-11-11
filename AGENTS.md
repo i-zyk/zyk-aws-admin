@@ -247,3 +247,7 @@ Most formatting and common issues are automatically fixed by Biome. Run `pnpm ex
 - [2026-11-10][R01] turbo 会并行跑各包的 `test`，多个包共用一个测试库会互相干扰；每个需要数据库的测试包在 `globalSetup` 里给 `getTestDatabaseUrl` 传自己的后缀（如 auth 用 `_auth_test`），各用独立测试库。
 - [2026-11-10][R01] 不存在的 Next.js 子路由直接渲染根 404，不经过其父目录的受保护 layout；验收未来页面的登录跳转前先建占位 page，R01 已为 new 和 [id] 建好占位页。
 - [2026-11-11][R01] Next.js 共享布局在客户端导航时会复用，不能只在 layout 中鉴权；所有后台 page 在渲染前调用 `@/lib/require-session` 的 `requireSession()`（React cache 仅请求内去重），R02/R05/R06 替换占位页时必须保留。
+- [2026-11-11][R02] API 包内的数据库测试文件共用一个测试库，Vitest 使用 `fileParallelism: false` 防止各文件 reset 相互干扰；跨包仍按 R01 约定分库。
+- [2026-11-11][R02] 本机 Fake-IP 导致 GitHub 头像解析为 198.18 地址，Next 图片优化会拒绝；用户确认仅 `GithubAvatar` 在 development 使用 `unoptimized`，生产仍优化，GitHub API 仍走服务端。
+- [2026-11-11][R02] `.next/types` 的旧构建路由类型与 `.next/dev/types` 不一致时会让已存在路由的 typedRoutes 校验失败；运行 `pnpm -F web exec next typegen` 重新生成，保留正在运行的 `.next/dev`。
+- [2026-11-11][R02] Base UI AvatarImage 搭配 Next Image 时使用 `keepMounted`，让实际 img 的 load/error 驱动状态；默认模式会先下载原始 src，导致生产原图和优化图重复加载。加载/错误时隐藏实际图并保留 AvatarFallback。
