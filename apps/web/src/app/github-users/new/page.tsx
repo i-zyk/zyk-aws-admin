@@ -1,7 +1,6 @@
-import Link from "next/link";
-
 import { requireSession } from "@/lib/require-session";
 
+import { GithubPreview } from "./github-preview";
 import { GithubSearch } from "./github-search";
 import { parseSearchPage, searchHref } from "./search-params";
 
@@ -20,16 +19,11 @@ export default async function NewGithubUserPage({
 		<div className="container mx-auto max-w-3xl px-4 py-6">
 			<h1 className="font-bold text-2xl">添加 GitHub 用户</h1>
 			{username ? (
-				<section className="mt-6 flex flex-col gap-4">
-					<h2 className="font-semibold text-lg">{username}</h2>
-					<p className="text-muted-foreground">资料预览功能开发中。</p>
-					<Link
-						className="underline underline-offset-4"
-						href={searchHref(q, page)}
-					>
-						返回搜索结果
-					</Link>
-				</section>
+				<GithubPreview
+					backHref={q ? searchHref(q, page) : "/github-users/new"}
+					key={username}
+					username={username}
+				/>
 			) : (
 				<GithubSearch key={`${q}:${page}`} page={page} q={q} />
 			)}

@@ -1,6 +1,7 @@
 import z from "zod";
 
-import { searchKeywordSchema } from "../github/schemas";
+import { type GithubProfileDto, toProfileDto } from "../github/mapper";
+import { githubUsernameSchema, searchKeywordSchema } from "../github/schemas";
 import { protectedProcedure, router } from "../index";
 
 const SEARCH_PAGE_SIZE = 10;
@@ -9,6 +10,26 @@ const SEARCH_MAX_PAGE = SEARCH_MAX_RESULTS / SEARCH_PAGE_SIZE;
 
 /** GitHub 用户名单相关接口，具体 procedure 在 R02～R10 中逐个加入 */
 export const githubUserRouter = router({
+	/**
+	 * 按用户名查看 GitHub 完整公开资料（添加前预览），只读不写数据库。
+	 * 用不会变的 githubId 判断是否已在名单中，GitHub 错误原样透传。
+	 */
+	lookup: protectedProcedure
+		.input(z.object({ username: githubUsernameSchema }))
+		.query(
+			async ({
+				ctx,
+				input,
+			}): Promise<GithubProfileDto & { savedId: number | null }> => {
+				const profile = await ctx.github.getUserByLogin(input.username);
+				const saved = await ctx.db.githubUser.findUnique({
+					select: { id: true },
+					where: { githubId: profile.id },
+				});
+				return { ...toProfileDto(profile), savedId: saved?.id ?? null };
+			}
+		),
+
 	search: protectedProcedure
 		.input(
 			z.object({

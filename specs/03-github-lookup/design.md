@@ -15,11 +15,14 @@
 - **后端** `githubUser.lookup`：`githubUsernameSchema` 校验 → `ctx.github.getUserByLogin(username)`（走 60 秒缓存）→ 用返回的 `githubId` 查 `githubUser` 得到 `savedId` → 输出 `toProfileDto(profile)` + `savedId`。
   - 用 `githubId` 判断是否已保存：GitHub 用户名可以改，数字 ID 不变，比按用户名判断更准确。PRD 第 5 节「按用户名判断时用 `mode: "insensitive"`」只在按用户名查询的场景适用，这里不需要。
 - **前端**：`/github-users/new/page.tsx` 发现 `username` 参数时渲染 `github-preview.tsx`（客户端）。组件先用 `githubUsernameSchema` 校验，不合法直接显示「用户名格式不正确」，不发请求；合法则查询 `lookup`（`staleTime: 60_000`、`refetchOnWindowFocus: false`、`retry: false`、`skipGlobalErrorToast`）。
+  - 加载中显示骨架屏（`role="status"`），错误统一用 `getAppErrorMessage` 转成提示；「返回搜索结果」在所有状态下都显示。`savedId` 为空时卡片操作区先放一个禁用的「加入数据库」按钮占位，R04 接入实际行为。预览组件以 `username` 为 key，切换用户时重置状态。
 - **资料卡片** `apps/web/src/components/github-users/github-profile-card.tsx`：只负责展示 GitHub 资料，操作区通过 `children`（或 `actions` 插槽）由调用方传入，R06 详情页复用同一张卡片。
 - **返回搜索结果**：链接到 `/github-users/new?q=<q>&page=<page>`（取当前 URL 里的 `q`、`page`；没有时链接到 `/github-users/new`）。
 - **博客链接**：`const SAFE_URL_PATTERN = /^https?:\/\//i;` 符合才渲染 `<a>`；GitHub 常见的不带协议的博客地址（如 `example.com`）显示为纯文本（技术参考未规定，暂按此，不自动补 `https://`）。
 - **Twitter**：显示 `@用户名`，链接到 `https://x.com/<用户名>`（技术参考未规定，暂按此）。
-- **日期**：GitHub 注册时间按 `YYYY-MM-DD` 显示。
+- **日期**：GitHub 注册时间按 `YYYY-MM-DD` 显示，按 UTC 取日期（卡片可能在服务端渲染，避免服务端与浏览器时区不同导致水合不一致）。
+- **公开邮箱**：按纯文本显示，不渲染 `mailto:` 链接（外链组件只接受 http/https）。
+- **数字**：用固定区域 `zh-CN` 的千分位格式，服务端与浏览器结果一致。
 
 ## 涉及模块 / 文件
 

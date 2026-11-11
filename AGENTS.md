@@ -253,3 +253,5 @@ Most formatting and common issues are automatically fixed by Biome. Run `pnpm ex
 - [2026-11-11][R02] Base UI AvatarImage 搭配 Next Image 时使用 `keepMounted`，让实际 img 的 load/error 驱动状态；默认模式会先下载原始 src，导致生产原图和优化图重复加载。加载/错误时隐藏实际图并保留 AvatarFallback。
 - [2026-11-11][R02] GitHub 用户搜索重复 type 限定符时实测采用第一个；固定 `type:user` 必须放在用户关键字之前，末尾追加会被输入 type:org 覆盖。已增加回归测试，并同步 PRD/技术设计中的 URL 示例。
 - [2026-11-11][R02] agent-browser 的 find/fill 会给元素添加 data-agent-browser-located；在 SSR 表单尚未水合时操作会引入工具造成的 hydration 警告。先用不改 DOM 的 wait --fn 等待查询结果/图片就绪，再操作；重开浏览器后 Next MCP 无错误。
+- [2026-11-11][R03] web 包暂无单元测试框架；纯展示组件用临时目录里的 tsx + `react-dom/server` `renderToStaticMarkup` 冒烟脚本核对输出（不入库），日期按 UTC 格式化避免时区导致结果漂移。
+- [2026-11-11][R03] 全仓 `pnpm run check` 目前有约 50 个历史错误（fumadocs、native、ui、login/sign-in 表单等未改动文件）；验收时对本批改动的目录单独跑 `pnpm exec ultracite check <路径>` 判断是否通过。
