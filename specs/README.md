@@ -4,11 +4,11 @@
 >
 > 一个需求的 tasks.md 全部完成后，把下表中该需求的状态改为 `- [✅]`
 >
-> 编号说明：R01～R10 与 PRD 的 REQ-01～REQ-10 一一对应；R00 是 PRD 第 5、6、8 节和里程碑 M1 中的公共基础设施，单独作为一个需求，排在最前面。
+> 编号说明：R01～R10 与 PRD 的 REQ-01～REQ-10 一一对应；R00 是 PRD 第 5、6、8 节和里程碑 M1 中的公共基础设施，单独作为一个需求，排在最前面。R11 是 R00 验收时新增的收尾需求（见 [R00「已确认决策」D3](00-foundation/requirements.md)），清理基线 `907bf5b` 就存在的 lint 问题，依赖其他所有需求，排在最后。
 
 | 序号 | 需求 | 依赖 | 状态 |
 |------|------|------|------|
-| R00 | [基础设施：数据模型、GitHub 客户端、错误码、测试框架](00-foundation/requirements.md) | 无 | - [ ] |
+| R00 | [基础设施：数据模型、GitHub 客户端、错误码、测试框架](00-foundation/requirements.md) | 无 | - [✅] |
 | R01 | [注册与登录（开放注册 + 限流 + 登录跳转）](01-auth-access/requirements.md) | R00 | - [ ] |
 | R02 | [模糊搜索 GitHub 用户](02-github-search/requirements.md) | R00、R01 | - [ ] |
 | R03 | [查看 GitHub 用户资料](03-github-lookup/requirements.md) | R00、R01、R02 | - [ ] |
@@ -19,6 +19,7 @@
 | R08 | [从 GitHub 同步](08-github-user-sync/requirements.md) | R05、R06 | - [ ] |
 | R09 | [删除（物理删除）](09-github-user-delete/requirements.md) | R05、R06 | - [ ] |
 | R10 | [批量删除（P1）](10-github-user-bulk-delete/requirements.md) | R09 | - [ ] |
+| R11 | [清理遗留 lint](11-legacy-lint-cleanup/requirements.md) | R00～R10 全部 | - [ ] |
 
 ## 建议开发顺序
 
@@ -33,6 +34,7 @@
 9. R08 从 GitHub 同步
 10. R09 删除
 11. R10 批量删除（P1，本期尽量做）
+12. R11 清理遗留 lint（排在所有功能之后、W8 交付之前；全仓 `pnpm run check` 0 错误）
 
 ## 不在本期范围
 

@@ -34,17 +34,24 @@
   - 说明：新建 `apps/web/src/lib/app-error.ts`（`appCode` → 中文提示、重置时间格式化）；`apps/web/src/utils/trpc.ts` 全局 toast 支持 `meta.skipGlobalErrorToast`
   - 对应验收标准：R00-AC11
   - 测试：`pnpm run test`（packages/api 现有 5 个用例），`pnpm exec turbo run check-types --filter=web`（web 及依赖共 5 个任务），`pnpm exec ultracite check apps/web/src/lib/app-error.ts apps/web/src/utils/trpc.ts`，另用 `node --experimental-strip-types` 临时脚本冒烟验证 7 个 appCode 文案、同步场景、限流 HH:mm / HH:mm:ss 与缺 resetAt、未知码/原型键/空 message/非 Error 回退共 23 项，并用 web 的 `@tanstack/react-query` 验证 `meta.skipGlobalErrorToast` 为 true 时 `QueryCache.onError` 不弹 toast、未设或 false 时照常弹，脚本放在临时目录、未进项目，通过（第 1 轮）
-- [ ] 8. 编写测试
+- [✅] 8. 编写测试
   - [✅] 8.1 `client.test.ts`（模拟 `fetch`）：请求头齐全、有/无 token 时 `Authorization` 的有无、搜索 URL 带 `type:user`/`per_page=10`/`page`；搜索和资料查询各自的成功、404、403+remaining=0（搜索得到 `GITHUB_SEARCH_RATE_LIMITED`、资料得到 `GITHUB_RATE_LIMITED`，`resetAt` 正确）、429、422、5xx、超时（假的 `fetch` 抛 `TimeoutError`）、网络错误、返回字段缺失或类型不对
     - 测试：`pnpm run test`（packages/api 共 58 个用例，其中 `src/github/client.test.ts` 53 个），`pnpm exec turbo run check-types --filter=@zyk-aws-admin/api`（3 个任务），`pnpm exec ultracite check packages/api`（16 个文件），通过（第 1 轮）
-  - [ ] 8.2 缓存：同一关键字不同大小写第二次不发请求；61 秒后重新请求；第 501 条写入后最早的条目被淘汰；`getUserById` 和 `cache: false` 每次都发请求；错误响应不进缓存
-  - [ ] 8.3 `schemas.test.ts`：用户名合法/非法边界（39/40 位、首尾 `-`、`--`、中文、空串）；关键字首尾空格、0/1/100/101 个字符
-  - [ ] 8.4 `errors.test.ts`：通过 `createCaller` 或 `t.createCallerFactory` 调用一个抛 `appError` 的测试 procedure，断言格式化后的 `data.appCode`、`data.resetAt`；普通错误 `appCode` 为 `null`
+  - [✅] 8.2 缓存：同一关键字不同大小写第二次不发请求；61 秒后重新请求；第 501 条写入后最早的条目被淘汰；`getUserById` 和 `cache: false` 每次都发请求；错误响应不进缓存
+    - 测试：`pnpm run test`（packages/api 共 78 个用例，其中 `src/github/cache.test.ts` 20 个），`pnpm exec turbo run check-types --filter=@zyk-aws-admin/api`（3 个任务），`pnpm exec ultracite check packages/api`（17 个文件），通过（第 1 轮）
+  - [✅] 8.3 `schemas.test.ts`：用户名合法/非法边界（39/40 位、首尾 `-`、`--`、中文、空串）；关键字首尾空格、0/1/100/101 个字符
+    - 测试：`pnpm run test`（packages/api 共 111 个用例，其中 `src/github/schemas.test.ts` 33 个），`pnpm exec turbo run check-types --filter=@zyk-aws-admin/api`（3 个任务），`pnpm exec ultracite check packages/api`（18 个文件），通过（第 1 轮）
+  - [✅] 8.4 `errors.test.ts`：通过 `createCaller` 或 `t.createCallerFactory` 调用一个抛 `appError` 的测试 procedure，断言格式化后的 `data.appCode`、`data.resetAt`；普通错误 `appCode` 为 `null`
+    - 测试：`pnpm run test`（packages/api 共 121 个用例，其中 `src/errors.test.ts` 10 个），`pnpm exec turbo run check-types --filter=@zyk-aws-admin/api`（3 个任务），`pnpm exec ultracite check packages/api`（19 个文件），通过（第 1 轮）
   - 对应验收标准：R00-AC2 ~ R00-AC11
-- [ ] 9. 自测并对照 requirements.md 逐条验收
-  - 说明：`pnpm run test`、`pnpm run check`、`pnpm run check-types` 全部通过；检查迁移 SQL 与模型一致；`grep` 确认 web 代码里没有 `GITHUB_TOKEN`
+  - 测试：`pnpm run test`（turbo → packages/api `varlock run --path ../db/ -- vitest run`，5 个测试文件 121 个用例全部通过，其中 8.1 `client.test.ts` 53、8.2 `cache.test.ts` 20、8.3 `schemas.test.ts` 33、8.4 `errors.test.ts` 10，另 `test-database.test.ts` 5），`pnpm exec turbo run check-types --force`（7 个任务），相对基线 `907bf5b` 改动/新增的 27 个代码和配置文件 `pnpm exec ultracite check` 0 问题，通过（第 1 轮，提交点回归测试）
+- [✅] 9. 自测并对照 requirements.md 逐条验收
+  - 说明：`pnpm run test`、`pnpm run check-types` 全部通过；`pnpm run check` 只检查 R00 改动过的文件（相对基线 `907bf5b` 新增或修改的代码和配置文件，`pnpm exec ultracite check <文件...>`）并 0 问题；检查迁移 SQL 与模型一致；`grep` 确认 web 代码里没有 `GITHUB_TOKEN`
+  - 范围调整（2026-11-10，用户已确认，见 requirements.md「已确认决策」D3）：全仓 `pnpm run check` 的 55 个错误全部在 R00 没有改动的文件里，基线 `907bf5b` 就已存在，不属于 R00 范围，所以 R00-AC14 的 lint 检查缩小到 R00 改动过的文件；全仓 0 错误由 R11「清理遗留 lint」负责
   - 对应验收标准：R00-AC1 ~ R00-AC14
+  - 测试：`pnpm run test`（packages/api 5 个文件 121 个用例），`pnpm run check-types`（7 个任务），`(git diff --name-only 907bf5b HEAD; git ls-files --others --exclude-standard)` 中的代码和配置文件交给 `pnpm exec ultracite check`（27 个文件 0 问题），`cd packages/db && varlock run -- npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code`（No difference）和 `prisma migrate status`（up to date），并人工核对迁移 SQL 的 `github_user` 列、默认值、唯一键与 login/tags(GIN)/createdAt 索引与模型一致，`grep -rn GITHUB_TOKEN apps/web apps/native`（无结果），通过（第 1 轮）
 
 - CR（2026-11-10）：Codex 提出 0 条，采纳 0 条；不采纳：无
 - CR（2026-11-10）：Codex 提出 0 条，采纳 0 条；不采纳：无（Codex 未发现可操作问题；其注明的数据库集成测试未运行属审查说明，非问题，交 W6R 回归测试覆盖）
 - CR（2026-11-10）：Codex 提出 0 条，采纳 0 条；不采纳：无（Codex 未发现可操作问题，api/server/web 类型检查通过；其注明的数据库集成测试未运行属审查说明，非问题，交 W6R 回归测试覆盖）
+- CR（2026-11-10）：Codex 提出 0 条，采纳 0 条；不采纳：无（Codex 未发现新增测试与文档改动中的可操作问题，三个新测试文件的 api 类型检查和 lint 通过；其注明的运行时测试未运行属审查说明，非问题，交 W6R 回归测试覆盖）
