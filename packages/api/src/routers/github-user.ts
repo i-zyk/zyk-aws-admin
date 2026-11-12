@@ -10,6 +10,7 @@ import {
 	toRecordDto,
 } from "../github/mapper";
 import {
+	githubUserIdSchema,
 	githubUserListInputSchema,
 	githubUsernameSchema,
 	searchKeywordSchema,
@@ -39,6 +40,33 @@ const alreadySavedError = (cause?: unknown) =>
 
 /** GitHub 用户名单相关接口，具体 procedure 在 R02～R10 中逐个加入 */
 export const githubUserRouter = router({
+	/**
+	 * 名单记录详情：只读本地数据库，不请求 GitHub。
+	 * createdById 不建外键（不能给 Better Auth 的 user 表加反向关联），添加人单独查；
+	 * 添加人账号已删除时 createdBy 为 null。
+	 */
+	byId: protectedProcedure
+		.input(z.object({ id: githubUserIdSchema }))
+		.query(
+			async ({
+				ctx,
+				input,
+			}): Promise<
+				GithubUserRecordDto & { createdBy: { id: string; name: string } | null }
+			> => {
+				const record = await ctx.db.githubUser.findUnique({
+					where: { id: input.id },
+				});
+				if (!record) {
+					throw appError("NOT_FOUND", AppCode.RECORD_NOT_FOUND);
+				}
+				const createdBy = await ctx.db.user.findUnique({
+					select: { id: true, name: true },
+					where: { id: record.createdById },
+				});
+				return { ...toRecordDto(record), createdBy };
+			}
+		),
 	/**
 	 * 把 GitHub 用户加入名单：不走缓存重新拉取最新资料，按 githubId 判重后写库。
 	 * 先查后插之间的并发由 githubId 唯一约束兜底（P2002 → CONFLICT）；GitHub 出错时不写库。

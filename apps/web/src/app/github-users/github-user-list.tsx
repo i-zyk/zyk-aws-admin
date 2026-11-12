@@ -57,6 +57,7 @@ import {
 import { GithubAvatar } from "@/components/github-users/github-avatar";
 import { TagList } from "@/components/github-users/tag-list";
 import { getAppErrorMessage } from "@/lib/app-error";
+import { formatDateTime } from "@/lib/format-date-time";
 import { useTRPC } from "@/utils/trpc";
 
 import {
@@ -79,16 +80,8 @@ const SKELETON_ROW_KEYS = Array.from(
 	(_, index) => `skeleton-${index}`
 );
 
-// 固定区域格式；列表数据只在浏览器端获取，按浏览器本地时区显示
+// 固定区域格式；时间格式见 lib/format-date-time.ts
 const NUMBER_FORMAT = new Intl.NumberFormat("zh-CN");
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat("zh-CN", {
-	day: "2-digit",
-	hour: "2-digit",
-	hourCycle: "h23",
-	minute: "2-digit",
-	month: "2-digit",
-	year: "numeric",
-});
 
 const SORT_ITEMS = [
 	{ label: "添加时间", value: "createdAt" },
@@ -107,13 +100,6 @@ const PAGE_SIZE_ITEMS = GITHUB_USER_LIST_PAGE_SIZES.map((size) => ({
 }));
 
 const ALL_TAGS_LABEL = "全部标签";
-
-function formatDateTime(iso: string): string {
-	const date = new Date(iso);
-	return Number.isNaN(date.getTime())
-		? EMPTY_PLACEHOLDER
-		: DATE_TIME_FORMAT.format(date);
-}
 
 /** 去掉首尾空白后为空就显示「—」 */
 function TextCell({ value }: { value: string | null }) {

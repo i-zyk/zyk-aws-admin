@@ -12,7 +12,7 @@
 ## 方案概述
 
 - **`githubUser.byId({ id })`**：`findUnique({ where: { id } })`，没有就抛 `NOT_FOUND` / `RECORD_NOT_FOUND`。添加人单独查：`ctx.db.user.findUnique({ where: { id: record.createdById }, select: { id: true, name: true } })`（`createdById` 不建外键，所以不能用 `include`）。输出 `toRecordDto(record)` + `createdBy: { id, name } | null`。
-- **页面** `/github-users/[id]`：`page.tsx`（服务端）读取 `params`，用 `z.coerce.number().int().positive()` 解析，不合法直接渲染「记录不存在」组件；合法则渲染客户端组件 `github-user-detail.tsx` 查询 `byId`（`meta.skipGlobalErrorToast`，错误在页面内显示）。
+- **页面** `/github-users/[id]`：`page.tsx`（服务端）读取 `params`，用 `id-param.ts` 的 `parseGithubUserIdParam` 解析（先用 `/^[1-9]\d*$/` 限定十进制正整数写法，再过 `githubUserIdSchema`；不用 `z.coerce`，因为它会把 `" 1"`、`1e3`、`0x10` 也转成合法 ID），不合法直接渲染「记录不存在」组件；合法则渲染客户端组件 `github-user-detail.tsx` 查询 `byId`（`meta.skipGlobalErrorToast`，错误在页面内显示）。
   - `RECORD_NOT_FOUND`：渲染同一个「记录不存在」组件（`apps/web/src/app/github-users/[id]/record-not-found.tsx`，含「返回列表」链接）。
   - 布局：上方是 R03 的 `github-profile-card.tsx`，下方是「后台信息」区块（备注、标签、添加人、添加时间、最后同步时间），右上角预留操作区（R07～R09 加按钮）。
 - 数据请求在客户端做（和现有 `/dashboard` 的 `privateData` 一致）：tRPC 请求需要浏览器带跨域 Cookie 访问 `:3000`，服务端组件里取数据要额外转发 Cookie，技术参考未规定，暂按客户端请求。
@@ -21,11 +21,15 @@
 
 | 文件 | 改动 |
 | --- | --- |
+| `packages/api/src/github/schemas.ts` | 新增 `GITHUB_USER_ID_MAX`、`githubUserIdSchema`（前后端共用，R07～R09 的 id 输入也用它） |
 | `packages/api/src/routers/github-user.ts` | 新增 `byId` |
 | `packages/api/src/routers/github-user.by-id.test.ts` | 新增测试 |
 | `apps/web/src/app/github-users/[id]/page.tsx` | 新增 |
 | `apps/web/src/app/github-users/[id]/github-user-detail.tsx` | 新增（客户端） |
 | `apps/web/src/app/github-users/[id]/record-not-found.tsx` | 新增 |
+| `apps/web/src/app/github-users/[id]/id-param.ts` | 新增：URL 中 id 的解析 |
+| `apps/web/src/lib/format-date-time.ts` | 新增：从 `github-user-list.tsx` 抽出的 `formatDateTime`，列表和详情共用 |
+| `apps/web/src/app/github-users/github-user-list.tsx` | 改用 `lib/format-date-time.ts`（行为不变） |
 
 ## 数据模型
 
@@ -35,7 +39,7 @@
 
 ```ts
 githubUser.byId: protectedProcedure
-  .input(z.object({ id: z.number().int().positive() }))
+  .input(z.object({ id: githubUserIdSchema })) // schemas.ts：z.number().int().positive().max(GITHUB_USER_ID_MAX = 2147483647)
   .query(...) => GithubUserRecordDto & { createdBy: { id: string; name: string } | null }
 ```
 

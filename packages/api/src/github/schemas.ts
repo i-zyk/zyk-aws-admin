@@ -49,6 +49,18 @@ export const tagsSchema = z
 		z.array(z.string()).max(TAGS_MAX_COUNT, `标签最多 ${TAGS_MAX_COUNT} 个`)
 	);
 
+// ---- 名单记录 ID（R06 起）：详情页 URL 参数解析和 byId 等接口输入共用 ----
+
+/** 记录 ID 是 PostgreSQL Int（32 位有符号），超过上限的 ID 一定不存在 */
+export const GITHUB_USER_ID_MAX = 2_147_483_647;
+
+/** 名单记录 ID：正整数，不超过 Int 上限 */
+export const githubUserIdSchema = z
+	.number()
+	.int()
+	.positive()
+	.max(GITHUB_USER_ID_MAX);
+
 // ---- 名单列表（R05）：URL 参数解析和 githubUser.list 输入共用 ----
 
 export const GITHUB_USER_LIST_SORT_FIELDS = [
