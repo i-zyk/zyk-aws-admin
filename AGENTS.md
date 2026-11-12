@@ -256,3 +256,7 @@ Most formatting and common issues are automatically fixed by Biome. Run `pnpm ex
 - [2026-11-11][R03] web 包暂无单元测试框架；纯展示组件用临时目录里的 tsx + `react-dom/server` `renderToStaticMarkup` 冒烟脚本核对输出（不入库），日期按 UTC 格式化避免时区导致结果漂移。
 - [2026-11-11][R03] 全仓 `pnpm run check` 目前有约 50 个历史错误（fumadocs、native、ui、login/sign-in 表单等未改动文件）；验收时对本批改动的目录单独跑 `pnpm exec ultracite check <路径>` 判断是否通过。
 - [2026-11-11][R04] `@prisma/adapter-pg` 下 P2002 的 `meta.target` 为空，约束名只在 `meta.driverAdapterError.cause.constraint` 里；判断唯一约束冲突统一用 `@zyk-aws-admin/db` 的 `isUniqueConstraintError(error, field?)`，不要直接读 `meta.target`。
+- [2026-11-12][R11] 根 Biome 原本会检查工作流状态文件 `.workflow/state.json`（git 已排除但 Biome 不读 info/exclude）；已在根 `biome.json` 的 includes 加 `!.workflow`，以后新增本地工具目录同样在这里排除。
+- [2026-11-12][R11] R11 任务 3 后全仓 `pnpm run check` 已为 0 错误（前述「基线遗留错误」条目失效）；之后改动应保持全仓 check 干净，不用 `biome-ignore` 或在根 `biome.json` 排除目录/关规则规避。
+- [2026-11-12][R11] 全仓 lint 基线已清零（`pnpm run check` 0 错误），此后各需求应直接跑全仓 `pnpm run check`，不再只查改动文件；`packages/ui/src/lib/utils.ts` 仅对该文件关闭 `noBarrelFile`（shadcn 约定），不要加 `biome-ignore` 或在根 `biome.json` 排除目录。
+- [2026-11-12][R11] `apps/native/metro.config.js` 必须用 `__dirname`，不能让 `ultracite fix` 改成 `import.meta.dirname`：文件含 `import.meta` 会被按 ES 模块解析，`module.exports` 失效、`require` 得到空对象，`expo export` 加载配置即报错（根 `package.json` 的 `"type": "module"` 不是原因，`apps/native` 有自己的 `package.json`）。

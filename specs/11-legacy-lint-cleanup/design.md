@@ -10,21 +10,52 @@
 
 ## 方案概述
 
-开工时先执行 `pnpm exec biome check --max-diagnostics=500` 拿到当时的完整清单，按文件分组处理。以下是 R00 时（基线 `907bf5b`）的清单和处理思路，作为参考：
+开工时先执行 `pnpm exec biome check --max-diagnostics=500` 拿到当时的完整清单，按文件分组处理。
 
-| 文件 | 问题 | 处理 |
-| --- | --- | --- |
-| `apps/fumadocs/biome.json` | `$schema` 为 2.2.0，与 CLI 2.5.15 不符；`linter.rules.recommended` 已弃用 | `$schema` 改为 `https://biomejs.dev/schemas/2.5.15/schema.json`（或 `biome migrate` 后核对）；`recommended: true` 改为 `preset: "recommended"` |
-| `packages/ui/src/lib/utils.ts` | `noBarrelFile` | shadcn 约定写法，不重构；文件顶部加 `// biome-ignore lint/performance/noBarrelFile: shadcn 约定的 cn 导出入口` |
-| `apps/web/src/app/login/page.tsx`、`sign-in-form.tsx`、`sign-up-form.tsx`、`mode-toggle.tsx`、`user-menu.tsx` | `noJsxPropsBind` | 把内联箭头函数提到组件外或用 `useCallback`；R01 重写后以实际剩余为准 |
-| `apps/web/src/app/page.tsx` | `noNestedTernary`、`noUnnecessaryConditions` | 拆成提前返回或具名布尔变量 |
-| `apps/web/src/app/dashboard/dashboard.tsx` | `noUselessFragments`、`noUnusedFunctionParameters` | 去掉多余 Fragment、删除或用 `_` 前缀标记未用参数 |
-| `apps/web/src/lib/auth-client.ts` | `noNonNullAssertion` | 用类型收窄或带报错的取值替代 `!` |
-| `apps/server/src/env.server.ts` | `noBarrelFile` | 改为先导入再导出的普通模块写法，或让调用方直接从 `./env` 导入并在入口保留 `varlock/auto-load` 副作用导入；保证 `ENV` 在被读取前已加载 |
-| `apps/native/**`（`modal.tsx`、`sign-in.tsx`、`sign-up.tsx`、`theme-toggle.tsx`、`app-theme-context.tsx`、`auth-client.ts`、`utils/trpc.ts`） | `noJsxPropsBind`、`noUnnecessaryConditions`、`noNamespaceImport`、`useConsistentTypeDefinitions`、`noParametersOnlyUsedInRecursion` | 按规则逐条修复 |
-| `packages/auth/src/index.ts`、`packages/ui/src/components/*`（`input-group.tsx`、`label.tsx`、`message-scroller.tsx`） | 类型定义风格、a11y、`noExportedImports` | 按规则修复；a11y 问题用语义元素和键盘事件修复，不加忽略注释 |
-| `apps/fumadocs/src/**` | `noImportantStyles`、`noUnusedImports` | 按规则修复 |
-| `.workflow/state.json` | 格式 | 见 requirements.md「待确认问题」，开工时先确认 |
+### 当前清单（2026-11-12，R11 任务 1 盘点，HEAD `7a7b683`）
+
+共 50 个错误、3 个警告、2 个提示（与 R05～R10 记录的 50 个一致；比基线 `907bf5b` 的 55 个少，`apps/web/src/app/page.tsx`、`dashboard/dashboard.tsx` 已在 R01 重写中消失）。
+
+| 文件 | 级别 | 规则（数量） | 处理 |
+| --- | --- | --- | --- |
+| `.workflow/state.json` | 错误 | `format`（1） | 工作流状态文件，不是项目代码；按 requirements.md「已确认决策」D1，在根 `biome.json` 的 `files.includes` 中加 `"!.workflow"` 排除整个工作流目录（R11-AC4 唯一例外）；任务 1 已加，加后剩 49 个错误、3 个警告、2 个提示 |
+| `apps/fumadocs/biome.json` | 提示 | `deserialize`（2）：`$schema` 2.2.0 与 CLI 2.5.15 不符；`linter.rules.recommended` 已弃用 | `$schema` 改为 `https://biomejs.dev/schemas/2.5.15/schema.json`；`recommended: true` 改为 `preset: "recommended"`（任务 2） |
+| `packages/ui/src/lib/utils.ts` | 错误 | `noBarrelFile`（1） | shadcn 约定写法，不重构；文件内 `biome-ignore lint/performance/noBarrelFile` 并写明原因（任务 2） |
+| `apps/fumadocs/src/app/global.css` | 警告 | `noImportantStyles`（2） | 按规则修复（任务 3） |
+| `apps/fumadocs/src/lib/source.ts` | 警告 | `noUnusedImports`（1） | 删除未用导入（任务 3） |
+| `apps/server/src/env.server.ts` | 错误 | `noBarrelFile`（1） | 改为先导入再导出的普通模块写法，或让调用方直接从 `./env` 导入并在入口保留 `varlock/auto-load` 副作用导入；保证 `ENV` 在被读取前已加载（任务 3） |
+| `apps/web/src/app/login/page.tsx` | 错误 | `noJsxPropsBind`（2） | 内联箭头函数提到组件外或用 `useCallback`（任务 3） |
+| `apps/web/src/components/mode-toggle.tsx` | 错误 | `noJsxPropsBind`（3） | 同上 |
+| `apps/web/src/components/sign-in-form.tsx` | 错误 | `noJsxPropsBind`（4） | 同上 |
+| `apps/web/src/components/sign-up-form.tsx` | 错误 | `noJsxPropsBind`（5） | 同上 |
+| `apps/web/src/components/user-menu.tsx` | 错误 | `noJsxPropsBind`（1） | 同上 |
+| `apps/web/src/lib/auth-client.ts` | 错误 | `noNonNullAssertion`（1） | 用类型收窄或带报错的取值替代 `!` |
+| `apps/native/app/(drawer)/index.tsx` | 错误 | `noUnnecessaryConditions`（4）、`noNestedTernary`（1）、`noUnusedVariables`（1）、`noJsxPropsBind`（1）、`noLeakedRender`（1） | 按规则逐条修复（任务 3） |
+| `apps/native/app/modal.tsx` | 错误 | `noJsxPropsBind`（1） | 同上 |
+| `apps/native/components/sign-in.tsx` | 错误 | `noJsxPropsBind`（2）、`noUnnecessaryConditions`（1） | 同上 |
+| `apps/native/components/sign-up.tsx` | 错误 | `noJsxPropsBind`（3）、`noUnnecessaryConditions`（2） | 同上 |
+| `apps/native/components/theme-toggle.tsx` | 错误 | `noNamespaceImport`（1）、`noJsxPropsBind`（1） | 同上 |
+| `apps/native/contexts/app-theme-context.tsx` | 错误 | `useConsistentTypeDefinitions`（1） | 同上 |
+| `apps/native/lib/auth-client.ts` | 错误 | `noNamespaceImport`（1） | 同上 |
+| `apps/native/utils/trpc.ts` | 错误 | `noParametersOnlyUsedInRecursion`（1） | 同上 |
+| `packages/ui/src/components/input-group.tsx` | 错误 | `useSemanticElements`（2）、`useKeyWithClickEvents`（1）、`noNoninteractiveElementInteractions`（1）、`noJsxPropsBind`（1） | 删除整个文件（requirements.md「已确认决策」D2：全仓无引用，用户确认删除；需要时用 shadcn CLI 重新添加） |
+| `packages/ui/src/components/label.tsx` | 错误 | `noLabelWithoutControl`（1） | 同上 |
+| `packages/ui/src/components/message-scroller.tsx` | 错误 | `noExportedImports`（3） | 按规则修复 |
+
+R00 时清单里的 `packages/auth/src/index.ts` 已不再报错。
+
+### 任务 3 实施方式（2026-11-12）
+
+没有执行全仓 `ultracite fix`：剩余问题里能自动修复的只有 4 个，而且都是 unsafe 修复（比如把未用变量改名为 `_foregroundColor`、直接删掉 `!important`），逐条手动修复更可控。
+
+- `apps/fumadocs/src/app/global.css`：去掉两处 `!important`。`html > body[data-scroll-locked]` 的特异性高于 react-remove-scroll 注入的 `body[data-scroll-locked]`，`--removed-body-scroll-bar-size` 不需要 `!important` 也能覆盖；`margin-right` 在对方带 `!important` 时会覆盖不了，但 fumadocs-ui 里只有 flux 布局用 react-remove-scroll，本站用的 docs/home 布局不会出现 `data-scroll-locked`，所以当前行为不变。已在 CSS 注释里写明。
+- `apps/server/src/env.server.ts`：先 `import "varlock/auto-load"`，再 `import { ENV as loadedEnv } from "./env"` 并 `export const ENV = loadedEnv`，导入顺序保证先加载环境变量；调用方不用改。
+- web 登录/注册表单：新建 `apps/web/src/components/auth-text-field.tsx`，包含 `AuthTextField`（标签 + 输入框 + 错误列表，渲染出的 DOM 和原来一样）和模块级的 `selectSubmitState`，两个表单共用；提交处理函数改用 `useCallback`。`login/page.tsx`、`mode-toggle.tsx`、`user-menu.tsx` 的内联函数改为 `useCallback`。
+- `apps/web/src/lib/auth-client.ts`：直接去掉 `!`（`baseURL` 本来就是可选参数，运行时取到的值不变；`process.env.NEXT_PUBLIC_SERVER_URL` 保持原样写法，Next 才能在构建时内联）。
+- native：`(drawer)/index.tsx` 用 `getConnectionStatus()` 把加载/连接状态合成一个枚举，文案查表、图标交给 `ConnectionStatusIcon`（消除嵌套三元和 Biome 对 `isLoading` 的误判），同时删掉未使用的 `foregroundColor`；退出登录、关闭 modal 的处理函数提到模块级；表单 `selector` 提到模块级 `selectFormStatus`，聚焦下一个输入框用参数类型带 `null` 的 `focusInput(ref)` 加 `useCallback`（Biome 推断不出 `useRef(null)` 可能为空，会误报 `?.` 多余）；`expo-secure-store` 改为具名导入，只传 expoClient 用到的 `getItem/getItemAsync/setItem/setItemAsync`（expoClient 的 storage 类型本来就是 `Pick` 这四个）；`expo-haptics` 改为具名导入；`trpc.ts` 的 `fetch` 方法改为箭头函数属性（与 web 写法一致）；`AppThemeContextType` 改为 interface。
+- `packages/ui/src/components/label.tsx`：显式解构 `htmlFor` 和 `children` 再写回 `<label>`，渲染结果不变。
+- `packages/ui/src/components/message-scroller.tsx`：hooks 以 `useXxxPrimitive` 别名导入，再用同名常量导出，对外导出的名字不变。
+- `packages/ui/src/components/input-group.tsx`：`InputGroupAddon` 的「点击附加区域聚焦输入框」无法在不改变行为、不加忽略注释的前提下修复。按 requirements.md「已确认决策」D2（用户选 C），直接删除该文件（全仓无引用），不改其他文件；`message-scroller.tsx` 保留。
 
 ## 涉及模块 / 文件
 

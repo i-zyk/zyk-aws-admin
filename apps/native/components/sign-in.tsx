@@ -10,7 +10,7 @@ import {
 	TextField,
 	useToast,
 } from "heroui-native";
-import { useRef } from "react";
+import { type RefObject, useCallback, useRef } from "react";
 import { Text, View } from "react-native";
 import z from "zod";
 
@@ -58,9 +58,25 @@ function getErrorMessage(error: unknown): string | null {
 	return null;
 }
 
+/** 表单状态里提交按钮和顶部错误提示需要的部分 */
+const selectFormStatus = (state: {
+	isSubmitting: boolean;
+	errorMap: { onSubmit?: unknown };
+}): { isSubmitting: boolean; validationError: string | null } => ({
+	isSubmitting: state.isSubmitting,
+	validationError: getErrorMessage(state.errorMap.onSubmit),
+});
+
+function focusInput(ref: RefObject<InputRef | null>): void {
+	ref.current?.focus();
+}
+
 function SignIn() {
 	const passwordInputRef = useRef<InputRef>(null);
 	const { toast } = useToast();
+	const focusPasswordInput = useCallback(() => {
+		focusInput(passwordInputRef);
+	}, []);
 
 	const form = useForm({
 		defaultValues: {
@@ -100,12 +116,7 @@ function SignIn() {
 		<Surface className="rounded-lg p-4" variant="secondary">
 			<Text className="mb-4 font-medium text-foreground">Sign In</Text>
 
-			<form.Subscribe
-				selector={(state) => ({
-					isSubmitting: state.isSubmitting,
-					validationError: getErrorMessage(state.errorMap.onSubmit),
-				})}
-			>
+			<form.Subscribe selector={selectFormStatus}>
 				{({ isSubmitting, validationError }) => {
 					const formError = validationError;
 
@@ -127,9 +138,7 @@ function SignIn() {
 												keyboardType="email-address"
 												onBlur={field.handleBlur}
 												onChangeText={field.handleChange}
-												onSubmitEditing={() => {
-													passwordInputRef.current?.focus();
-												}}
+												onSubmitEditing={focusPasswordInput}
 												placeholder="email@example.com"
 												returnKeyType="next"
 												textContentType="emailAddress"

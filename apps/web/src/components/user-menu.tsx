@@ -11,12 +11,23 @@ import {
 import { Skeleton } from "@zyk-aws-admin/ui/components/skeleton";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useCallback } from "react";
 
 import { authClient } from "@/lib/auth-client";
 
 export default function UserMenu() {
 	const router = useRouter();
 	const { data: session, isPending } = authClient.useSession();
+	const handleSignOut = useCallback(() => {
+		authClient.signOut({
+			fetchOptions: {
+				onSuccess: () => {
+					router.push("/login");
+					router.refresh();
+				},
+			},
+		});
+	}, [router]);
 
 	if (isPending) {
 		return <Skeleton className="h-9 w-24" />;
@@ -40,19 +51,7 @@ export default function UserMenu() {
 					<DropdownMenuLabel>我的账户</DropdownMenuLabel>
 					<DropdownMenuSeparator />
 					<DropdownMenuItem>{session.user.email}</DropdownMenuItem>
-					<DropdownMenuItem
-						onClick={() => {
-							authClient.signOut({
-								fetchOptions: {
-									onSuccess: () => {
-										router.push("/login");
-										router.refresh();
-									},
-								},
-							});
-						}}
-						variant="destructive"
-					>
+					<DropdownMenuItem onClick={handleSignOut} variant="destructive">
 						退出登录
 					</DropdownMenuItem>
 				</DropdownMenuGroup>

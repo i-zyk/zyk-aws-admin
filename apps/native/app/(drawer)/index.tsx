@@ -9,17 +9,52 @@ import { SignUp } from "@/components/sign-up";
 import { authClient } from "@/lib/auth-client";
 import { queryClient, trpc } from "@/utils/trpc";
 
+type ConnectionStatus = "checking" | "connected" | "disconnected";
+
+const CONNECTION_DESCRIPTIONS: Record<ConnectionStatus, string> = {
+	checking: "Checking connection...",
+	connected: "Connected to API",
+	disconnected: "API Disconnected",
+};
+
+function getConnectionStatus(
+	isLoading: boolean,
+	isConnected: boolean
+): ConnectionStatus {
+	if (isLoading) {
+		return "checking";
+	}
+	return isConnected ? "connected" : "disconnected";
+}
+
+function handleSignOut() {
+	authClient.signOut();
+	queryClient.invalidateQueries();
+}
+
+function ConnectionStatusIcon({ status }: { status: ConnectionStatus }) {
+	const mutedColor = useThemeColor("muted");
+	const successColor = useThemeColor("success");
+	const dangerColor = useThemeColor("danger");
+
+	if (status === "checking") {
+		return <Ionicons color={mutedColor} name="hourglass-outline" size={20} />;
+	}
+	if (status === "connected") {
+		return <Ionicons color={successColor} name="checkmark-circle" size={20} />;
+	}
+	return <Ionicons color={dangerColor} name="close-circle" size={20} />;
+}
+
 export default function Home() {
 	const healthCheck = useQuery(trpc.healthCheck.queryOptions());
 	const privateData = useQuery(trpc.privateData.queryOptions());
 	const isConnected = healthCheck?.data === "OK";
-	const isLoading = healthCheck?.isLoading;
+	const connectionStatus = getConnectionStatus(
+		healthCheck.isLoading,
+		isConnected
+	);
 	const { data: session } = authClient.useSession();
-
-	const mutedColor = useThemeColor("muted");
-	const successColor = useThemeColor("success");
-	const dangerColor = useThemeColor("danger");
-	const foregroundColor = useThemeColor("foreground");
 
 	return (
 		<Container className="p-6">
@@ -37,10 +72,7 @@ export default function Home() {
 					<Text className="mb-4 text-muted text-sm">{session.user.email}</Text>
 					<Pressable
 						className="self-start rounded-lg bg-danger px-4 py-3 active:opacity-70"
-						onPress={() => {
-							authClient.signOut();
-							queryClient.invalidateQueries();
-						}}
+						onPress={handleSignOut}
 					>
 						<Text className="font-medium text-foreground">Sign Out</Text>
 					</Pressable>
@@ -69,26 +101,10 @@ export default function Home() {
 								TRPC Backend
 							</Text>
 							<Card.Description>
-								{isLoading
-									? "Checking connection..."
-									: isConnected
-										? "Connected to API"
-										: "API Disconnected"}
+								{CONNECTION_DESCRIPTIONS[connectionStatus]}
 							</Card.Description>
 						</View>
-						{isLoading && (
-							<Ionicons color={mutedColor} name="hourglass-outline" size={20} />
-						)}
-						{!isLoading && isConnected && (
-							<Ionicons
-								color={successColor}
-								name="checkmark-circle"
-								size={20}
-							/>
-						)}
-						{!(isLoading || isConnected) && (
-							<Ionicons color={dangerColor} name="close-circle" size={20} />
-						)}
+						<ConnectionStatusIcon status={connectionStatus} />
 					</View>
 				</Card>
 			</Card>

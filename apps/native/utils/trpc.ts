@@ -13,13 +13,12 @@ export const queryClient = new QueryClient();
 const trpcClient = createTRPCClient<AppRouter>({
 	links: [
 		httpBatchLink({
-			fetch(url, options) {
-				return fetch(url, {
+			fetch: (url, options) =>
+				fetch(url, {
 					...options,
 					// Better Auth Expo forwards the session cookie manually on native.
 					credentials: Platform.OS === "web" ? "include" : "omit",
-				});
-			},
+				}),
 			async headers() {
 				if (Platform.OS === "web") {
 					return {};

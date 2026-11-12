@@ -1,14 +1,14 @@
 import { useForm } from "@tanstack/react-form";
 import { Button } from "@zyk-aws-admin/ui/components/button";
-import { Input } from "@zyk-aws-admin/ui/components/input";
-import { Label } from "@zyk-aws-admin/ui/components/label";
 import { useRouter } from "next/navigation";
+import { type FormEvent, useCallback } from "react";
 import { toast } from "sonner";
 import z from "zod";
 
 import { authClient } from "@/lib/auth-client";
 import { getAuthErrorMessage } from "@/lib/auth-error";
 
+import { AuthTextField, selectSubmitState } from "./auth-text-field";
 import Loader from "./loader";
 
 export default function SignInForm({
@@ -49,6 +49,15 @@ export default function SignInForm({
 		},
 	});
 
+	const handleSubmit = useCallback(
+		(event: FormEvent<HTMLFormElement>) => {
+			event.preventDefault();
+			event.stopPropagation();
+			form.handleSubmit();
+		},
+		[form]
+	);
+
 	if (isPending) {
 		return <Loader />;
 	}
@@ -57,33 +66,19 @@ export default function SignInForm({
 		<div className="mx-auto mt-10 w-full max-w-md p-6">
 			<h1 className="mb-6 text-center font-bold text-3xl">登录</h1>
 
-			<form
-				className="space-y-4"
-				onSubmit={(e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					form.handleSubmit();
-				}}
-			>
+			<form className="space-y-4" onSubmit={handleSubmit}>
 				<div>
 					<form.Field name="email">
 						{(field) => (
-							<div className="space-y-2">
-								<Label htmlFor={field.name}>邮箱</Label>
-								<Input
-									id={field.name}
-									name={field.name}
-									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
-									type="email"
-									value={field.state.value}
-								/>
-								{field.state.meta.errors.map((error) => (
-									<p className="text-red-500" key={error?.message}>
-										{error?.message}
-									</p>
-								))}
-							</div>
+							<AuthTextField
+								errors={field.state.meta.errors}
+								label="邮箱"
+								name={field.name}
+								onBlur={field.handleBlur}
+								onValueChange={field.handleChange}
+								type="email"
+								value={field.state.value}
+							/>
 						)}
 					</form.Field>
 				</div>
@@ -91,32 +86,20 @@ export default function SignInForm({
 				<div>
 					<form.Field name="password">
 						{(field) => (
-							<div className="space-y-2">
-								<Label htmlFor={field.name}>密码</Label>
-								<Input
-									id={field.name}
-									name={field.name}
-									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
-									type="password"
-									value={field.state.value}
-								/>
-								{field.state.meta.errors.map((error) => (
-									<p className="text-red-500" key={error?.message}>
-										{error?.message}
-									</p>
-								))}
-							</div>
+							<AuthTextField
+								errors={field.state.meta.errors}
+								label="密码"
+								name={field.name}
+								onBlur={field.handleBlur}
+								onValueChange={field.handleChange}
+								type="password"
+								value={field.state.value}
+							/>
 						)}
 					</form.Field>
 				</div>
 
-				<form.Subscribe
-					selector={(state) => ({
-						canSubmit: state.canSubmit,
-						isSubmitting: state.isSubmitting,
-					})}
-				>
+				<form.Subscribe selector={selectSubmitState}>
 					{({ canSubmit, isSubmitting }) => (
 						<Button
 							className="w-full"
@@ -135,7 +118,7 @@ export default function SignInForm({
 					onClick={onSwitchToSignUp}
 					variant="link"
 				>
-					没有账号？去注册
+					没有账号？去注册1
 				</Button>
 			</div>
 		</div>

@@ -2,14 +2,19 @@
 
 import {
 	MessageScroller as MessageScrollerPrimitive,
-	useMessageScroller,
-	useMessageScrollerScrollable,
-	useMessageScrollerVisibility,
+	useMessageScroller as useMessageScrollerPrimitive,
+	useMessageScrollerScrollable as useMessageScrollerScrollablePrimitive,
+	useMessageScrollerVisibility as useMessageScrollerVisibilityPrimitive,
 } from "@shadcn/react/message-scroller";
 import { Button } from "@zyk-aws-admin/ui/components/button";
 import { cn } from "@zyk-aws-admin/ui/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
 import type * as React from "react";
+
+// 以本组件的名字重新导出 primitive 的 hooks，调用方只需从这一个文件导入
+const useMessageScroller = useMessageScrollerPrimitive;
+const useMessageScrollerScrollable = useMessageScrollerScrollablePrimitive;
+const useMessageScrollerVisibility = useMessageScrollerVisibilityPrimitive;
 
 function MessageScrollerProvider(
 	props: React.ComponentProps<typeof MessageScrollerPrimitive.Provider>

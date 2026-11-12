@@ -33,6 +33,7 @@
       "!**/convex/_generated",
       "!.agents",
       "!.claude",
+      "!.workflow",
       "!**/prisma/generated",
       "!apps/*/src/env.ts",
       "!packages/*/src/env.ts"
