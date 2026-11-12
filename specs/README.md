@@ -13,7 +13,7 @@
 | R02 | [模糊搜索 GitHub 用户](02-github-search/requirements.md) | R00、R01 | - [✅] |
 | R03 | [查看 GitHub 用户资料](03-github-lookup/requirements.md) | R00、R01、R02 | - [✅] |
 | R04 | [加入数据库](04-add-github-user/requirements.md) | R03 | - [✅] |
-| R05 | [名单列表](05-github-user-list/requirements.md) | R04 | - [ ] |
+| R05 | [名单列表](05-github-user-list/requirements.md) | R04 | - [✅] |
 | R06 | [用户详情](06-github-user-detail/requirements.md) | R03、R05 | - [ ] |
 | R07 | [修改备注和标签](07-github-user-edit/requirements.md) | R05、R06 | - [ ] |
 | R08 | [从 GitHub 同步](08-github-user-sync/requirements.md) | R05、R06 | - [ ] |

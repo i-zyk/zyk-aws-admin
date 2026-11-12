@@ -531,7 +531,7 @@ function ErrorState({
 	return (
 		<Alert variant="destructive">
 			<AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-				<span>{getAppErrorMessage(error)}</span>
+				<span>名单加载失败：{getAppErrorMessage(error)}</span>
 				<Button onClick={onRetry} size="sm" type="button" variant="outline">
 					重试
 				</Button>
