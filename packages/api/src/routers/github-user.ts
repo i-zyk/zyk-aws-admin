@@ -13,6 +13,7 @@ import {
 	toRecordDto,
 } from "../github/mapper";
 import {
+	githubUserDeleteManyInputSchema,
 	githubUserIdSchema,
 	githubUserListInputSchema,
 	githubUsernameSchema,
@@ -120,6 +121,20 @@ export const githubUserRouter = router({
 				throw appError("NOT_FOUND", AppCode.RECORD_NOT_FOUND);
 			}
 			return { id: input.id };
+		}),
+
+	/**
+	 * 批量物理删除（R10）：ID 去重后一条 DELETE 删除，已不存在的 ID 自然忽略，
+	 * 返回实际删除的行数；备注和标签随记录一起删除。
+	 */
+	deleteMany: protectedProcedure
+		.input(githubUserDeleteManyInputSchema)
+		.mutation(async ({ ctx, input }): Promise<{ count: number }> => {
+			const ids = Array.from(new Set(input.ids));
+			const { count } = await ctx.db.githubUser.deleteMany({
+				where: { id: { in: ids } },
+			});
+			return { count };
 		}),
 
 	/**

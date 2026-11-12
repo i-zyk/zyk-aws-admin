@@ -12,6 +12,7 @@ import {
 import type { AppRouter } from "@zyk-aws-admin/api/routers/index";
 import { Alert, AlertDescription } from "@zyk-aws-admin/ui/components/alert";
 import { Button, buttonVariants } from "@zyk-aws-admin/ui/components/button";
+import { Checkbox } from "@zyk-aws-admin/ui/components/checkbox";
 import {
 	Empty,
 	EmptyContent,
@@ -51,9 +52,11 @@ import {
 	type FormEvent,
 	type ReactNode,
 	useCallback,
+	useEffect,
 	useState,
 } from "react";
 
+import { BulkDeleteGithubUsersDialog } from "@/components/github-users/bulk-delete-dialog";
 import { DeleteGithubUserDialog } from "@/components/github-users/delete-github-user-dialog";
 import { EditGithubUserDialog } from "@/components/github-users/edit-github-user-dialog";
 import { GithubAvatar } from "@/components/github-users/github-avatar";
@@ -305,15 +308,48 @@ const COLUMN_LABELS = [
 	"操作",
 ] as const;
 
+// ---- 勾选（R10）：只在本页内勾选，URL 参数变化时清空 ----
+
+/** 表格勾选相关的状态和回调，由 GithubUserList 维护、逐层传给表格 */
+interface RowSelection {
+	/** 列表还在显示上一组参数的旧数据（placeholder）时为 true，此时不能勾选 */
+	disabled: boolean;
+	onToggle: (id: number, checked: boolean) => void;
+	onToggleAll: (checked: boolean) => void;
+	selectedIds: ReadonlySet<number>;
+}
+
+const NO_SELECTION: ReadonlySet<number> = new Set<number>();
+
 function UserRow({
 	user,
+	selected,
+	selectionDisabled,
+	onToggle,
 	onDeleted,
 }: {
 	user: ListItem;
+	selected: boolean;
+	selectionDisabled: boolean;
+	onToggle: RowSelection["onToggle"];
 	onDeleted: () => void;
 }) {
+	const handleCheckedChange = useCallback(
+		(checked: boolean) => {
+			onToggle(user.id, checked);
+		},
+		[onToggle, user.id]
+	);
 	return (
-		<TableRow>
+		<TableRow data-state={selected ? "selected" : undefined}>
+			<TableCell>
+				<Checkbox
+					aria-label={`选择 ${user.login}`}
+					checked={selected}
+					disabled={selectionDisabled}
+					onCheckedChange={handleCheckedChange}
+				/>
+			</TableCell>
 			<TableCell>
 				<GithubAvatar login={user.login} src={user.avatarUrl} />
 			</TableCell>
@@ -363,15 +399,30 @@ function UserRow({
 
 function UserTable({
 	items,
+	selection,
 	onDeleted,
 }: {
 	items: ListItem[];
+	selection: RowSelection;
 	onDeleted: () => void;
 }) {
+	const { disabled, selectedIds, onToggle, onToggleAll } = selection;
+	const selectedCount = items.filter((user) => selectedIds.has(user.id)).length;
+	const allSelected = items.length > 0 && selectedCount === items.length;
+	const someSelected = selectedCount > 0 && !allSelected;
 	return (
 		<Table>
 			<TableHeader>
 				<TableRow>
+					<TableHead className="w-10">
+						<Checkbox
+							aria-label="全选本页"
+							checked={allSelected}
+							disabled={disabled}
+							indeterminate={someSelected}
+							onCheckedChange={onToggleAll}
+						/>
+					</TableHead>
 					{COLUMN_LABELS.map((label) => (
 						<TableHead
 							className={cn(
@@ -386,7 +437,14 @@ function UserTable({
 			</TableHeader>
 			<TableBody>
 				{items.map((user) => (
-					<UserRow key={user.id} onDeleted={onDeleted} user={user} />
+					<UserRow
+						key={user.id}
+						onDeleted={onDeleted}
+						onToggle={onToggle}
+						selected={selectedIds.has(user.id)}
+						selectionDisabled={disabled}
+						user={user}
+					/>
 				))}
 			</TableBody>
 		</Table>
@@ -620,12 +678,14 @@ function ListBody({
 	data,
 	error,
 	params,
+	selection,
 	onDeleted,
 	onRetry,
 }: {
 	data: ListResult | undefined;
 	error: unknown;
 	params: GithubUserListParams;
+	selection: RowSelection;
 	onDeleted: () => void;
 	onRetry: () => void;
 }) {
@@ -643,7 +703,11 @@ function ListBody({
 	}
 	return (
 		<>
-			<UserTable items={data.items} onDeleted={onDeleted} />
+			<UserTable
+				items={data.items}
+				onDeleted={onDeleted}
+				selection={selection}
+			/>
 			<ListPagination params={params} total={data.total} />
 		</>
 	);
@@ -690,25 +754,141 @@ export function GithubUserList({ params }: { params: GithubUserListParams }) {
 	const handleRetry = useCallback(async () => {
 		await refetch();
 	}, [refetch]);
-	// 删掉的是当前页（非第 1 页）仅剩的一条时，列表刷新后该页为空，退回上一页（R09 design.md）
+	// 当前 URL 参数（页码、筛选、排序、每页条数）对应的列表，勾选和删除后的页码纠正都以它为作用域
+	const selectionScope = listHref(params);
+
+	// 删除后的页码纠正（R10 design.md）：删除时记下要纠正的列表参数和删除时刻，等该参数下的列表按删除后的数据
+	// 刷新完，如果当前页（非第 1 页）已没有记录而总数仍大于 0，就跳到刷新后的最后一页。
+	// 以刷新后的 total 为准，不用删除前的缓存去推算，这样别人先删掉了部分记录（count 偏小甚至为 0）时也能纠正；
+	// total 为 0 时不跳转，显示空状态。
+	const [pendingPageFix, setPendingPageFix] = useState<{
+		scope: string;
+		deletedAt: number;
+	} | null>(null);
+	const markPageFix = useCallback((scope: string) => {
+		setPendingPageFix({ deletedAt: Date.now(), scope });
+	}, []);
+	const { dataUpdatedAt } = query;
+	const refreshedData =
+		query.isFetching || query.isPlaceholderData ? undefined : query.data;
+	useEffect(() => {
+		// 参数和登记时不同（例如退页的跳转还没生效、或已翻到别处）时先不处理；
+		// 列表还没按删除后的数据刷新完（dataUpdatedAt 早于删除时刻）时继续等
+		const waiting =
+			!pendingPageFix ||
+			pendingPageFix.scope !== selectionScope ||
+			!refreshedData ||
+			dataUpdatedAt <= pendingPageFix.deletedAt;
+		if (waiting) {
+			return;
+		}
+		setPendingPageFix(null);
+		const pageIsEmpty = refreshedData.items.length === 0;
+		if (page > 1 && pageIsEmpty && refreshedData.total > 0) {
+			const lastPage = Math.max(1, Math.ceil(refreshedData.total / pageSize));
+			router.replace(listHref({ ...params, page: lastPage }));
+		}
+	}, [
+		dataUpdatedAt,
+		page,
+		pageSize,
+		params,
+		pendingPageFix,
+		refreshedData,
+		router,
+		selectionScope,
+	]);
+
+	// 删掉的是当前页（非第 1 页）仅剩的一条时，列表刷新后该页为空，退回上一页（R09 design.md）；
+	// 同时登记删除后的页码纠正，兜住别人同时删除记录导致上一页也为空的情况
 	const isLastItemOnPage = query.data?.items.length === 1 && page > 1;
 	const handleDeleted = useCallback(() => {
-		if (isLastItemOnPage) {
-			router.replace(listHref({ ...params, page: page - 1 }));
+		if (!isLastItemOnPage) {
+			markPageFix(selectionScope);
+			return;
 		}
-	}, [isLastItemOnPage, page, params, router]);
+		const previousPageHref = listHref({ ...params, page: page - 1 });
+		markPageFix(previousPageHref);
+		router.replace(previousPageHref);
+	}, [isLastItemOnPage, markPageFix, page, params, router, selectionScope]);
+
+	// 勾选只对当前 URL 参数有效：参数一变，旧的勾选自动作废（R10-AC5）
+	const [selection, setSelection] = useState<{
+		scope: string;
+		ids: ReadonlySet<number>;
+	}>({ ids: NO_SELECTION, scope: selectionScope });
+	// 参数变化后在渲染时直接重置，否则翻页再翻回来时旧的勾选会恢复
+	if (selection.scope !== selectionScope) {
+		setSelection({ ids: NO_SELECTION, scope: selectionScope });
+	}
+	// 翻页、改筛选后新数据回来之前，keepPreviousData 仍显示上一组参数的旧记录：
+	// 这时禁止勾选并视为没有勾选，避免把旧页的 ID 记到新参数下被批量删除
+	const selectionDisabled: boolean = query.isPlaceholderData;
+	const scopedIds =
+		selection.scope === selectionScope && !selectionDisabled
+			? selection.ids
+			: NO_SELECTION;
+	const pageItems: ListItem[] = selectionDisabled
+		? []
+		: (query.data?.items ?? []);
+	// 只算本页还在的记录：单条删除或列表刷新后，已不在本页的 ID 不再计入
+	const selectedIds = pageItems
+		.filter((user) => scopedIds.has(user.id))
+		.map((user) => user.id);
+	const handleToggle = useCallback(
+		(id: number, checked: boolean) => {
+			setSelection((current) => {
+				const next = new Set(
+					current.scope === selectionScope ? current.ids : NO_SELECTION
+				);
+				if (checked) {
+					next.add(id);
+				} else {
+					next.delete(id);
+				}
+				return { ids: next, scope: selectionScope };
+			});
+		},
+		[selectionScope]
+	);
+	const handleToggleAll = useCallback(
+		(checked: boolean) => {
+			setSelection({
+				ids: checked ? new Set(pageItems.map((user) => user.id)) : NO_SELECTION,
+				scope: selectionScope,
+			});
+		},
+		[pageItems, selectionScope]
+	);
+	const rowSelection: RowSelection = {
+		disabled: selectionDisabled,
+		onToggle: handleToggle,
+		onToggleAll: handleToggleAll,
+		selectedIds: scopedIds,
+	};
+	// 批量删除后清空勾选，并登记删除后的页码纠正：列表刷新后当前页删空时跳到最后一页（通常是上一页）
+	const handleBulkDeleted = useCallback(() => {
+		setSelection({ ids: NO_SELECTION, scope: selectionScope });
+		markPageFix(selectionScope);
+	}, [markPageFix, selectionScope]);
 
 	return (
 		<div className="mt-6 flex flex-col gap-4">
-			<search
-				aria-label="筛选名单"
-				className="flex flex-wrap items-end gap-x-6 gap-y-3"
-			>
-				<KeywordForm key={q} onApply={applyFilters} q={q} />
-				<TagSelect onApply={applyFilters} tag={tag} />
-				<SortControls onApply={applyFilters} order={order} sort={sort} />
-				<PageSizeSelect onApply={applyFilters} pageSize={pageSize} />
-			</search>
+			<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+				<search
+					aria-label="筛选名单"
+					className="flex flex-wrap items-end gap-x-6 gap-y-3"
+				>
+					<KeywordForm key={q} onApply={applyFilters} q={q} />
+					<TagSelect onApply={applyFilters} tag={tag} />
+					<SortControls onApply={applyFilters} order={order} sort={sort} />
+					<PageSizeSelect onApply={applyFilters} pageSize={pageSize} />
+				</search>
+				<BulkDeleteGithubUsersDialog
+					ids={selectedIds}
+					onDeleted={handleBulkDeleted}
+				/>
+			</div>
 			<section
 				aria-busy={query.isFetching}
 				aria-label="GitHub 用户名单"
@@ -721,6 +901,7 @@ export function GithubUserList({ params }: { params: GithubUserListParams }) {
 					onDeleted={handleDeleted}
 					onRetry={handleRetry}
 					params={params}
+					selection={rowSelection}
 				/>
 			</section>
 		</div>

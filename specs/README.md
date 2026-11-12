@@ -18,7 +18,7 @@
 | R07 | [修改备注和标签](07-github-user-edit/requirements.md) | R05、R06 | - [✅] |
 | R08 | [从 GitHub 同步](08-github-user-sync/requirements.md) | R05、R06 | - [✅] |
 | R09 | [删除（物理删除）](09-github-user-delete/requirements.md) | R05、R06 | - [✅] |
-| R10 | [批量删除（P1）](10-github-user-bulk-delete/requirements.md) | R09 | - [ ] |
+| R10 | [批量删除（P1）](10-github-user-bulk-delete/requirements.md) | R09 | - [✅] |
 | R11 | [清理遗留 lint](11-legacy-lint-cleanup/requirements.md) | R00～R10 全部 | - [ ] |
 
 ## 建议开发顺序

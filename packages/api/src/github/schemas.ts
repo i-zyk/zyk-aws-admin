@@ -77,6 +77,22 @@ export const githubUserUpdateInputSchema = z.strictObject({
 
 export type GithubUserUpdateInput = z.input<typeof githubUserUpdateInputSchema>;
 
+// ---- 批量删除（R10）：githubUser.deleteMany 输入 ----
+
+/** 一次批量删除最多的记录数（每页最多 50 条，只能勾选本页，正常不会超过） */
+export const GITHUB_USER_DELETE_MANY_MAX = 100;
+
+/** githubUser.deleteMany 输入：1～100 个记录 ID，重复的 ID 由接口去重 */
+export const githubUserDeleteManyInputSchema = z.object({
+	ids: z
+		.array(githubUserIdSchema)
+		.min(1, "请选择要删除的记录")
+		.max(
+			GITHUB_USER_DELETE_MANY_MAX,
+			`一次最多删除 ${GITHUB_USER_DELETE_MANY_MAX} 条`
+		),
+});
+
 // ---- 名单列表（R05）：URL 参数解析和 githubUser.list 输入共用 ----
 
 export const GITHUB_USER_LIST_SORT_FIELDS = [
