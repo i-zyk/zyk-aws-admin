@@ -255,3 +255,4 @@ Most formatting and common issues are automatically fixed by Biome. Run `pnpm ex
 - [2026-11-11][R02] agent-browser 的 find/fill 会给元素添加 data-agent-browser-located；在 SSR 表单尚未水合时操作会引入工具造成的 hydration 警告。先用不改 DOM 的 wait --fn 等待查询结果/图片就绪，再操作；重开浏览器后 Next MCP 无错误。
 - [2026-11-11][R03] web 包暂无单元测试框架；纯展示组件用临时目录里的 tsx + `react-dom/server` `renderToStaticMarkup` 冒烟脚本核对输出（不入库），日期按 UTC 格式化避免时区导致结果漂移。
 - [2026-11-11][R03] 全仓 `pnpm run check` 目前有约 50 个历史错误（fumadocs、native、ui、login/sign-in 表单等未改动文件）；验收时对本批改动的目录单独跑 `pnpm exec ultracite check <路径>` 判断是否通过。
+- [2026-11-11][R04] `@prisma/adapter-pg` 下 P2002 的 `meta.target` 为空，约束名只在 `meta.driverAdapterError.cause.constraint` 里；判断唯一约束冲突统一用 `@zyk-aws-admin/db` 的 `isUniqueConstraintError(error, field?)`，不要直接读 `meta.target`。

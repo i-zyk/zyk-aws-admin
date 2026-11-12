@@ -24,6 +24,10 @@
 
 `P2002` 的判断：Prisma 7 的错误类从生成的客户端导出（`Prisma.PrismaClientKnownRequestError`），W4 时按 `packages/db` 实际导出的路径引入；如果 db 包没有导出，在 `packages/db/src/index.ts` 增加一个 `isUniqueConstraintError(error)` 帮助函数（技术参考未规定，暂按此）。
 
+实现时确认（W4）：db 包原先没有导出 Prisma 错误类，已在 `packages/db/src/index.ts` 增加 `isUniqueConstraintError(error, field?)`。`@prisma/adapter-pg` 下 P2002 的 `meta` 没有 `target`，只有 `meta.driverAdapterError.cause.constraint.index`（如 `github_user_githubId_key`），所以函数同时识别 `meta.target`、`constraint.fields` 和索引名；拿不到约束信息时只按错误码判断。
+
+前端实现确认（W4）：`githubUser.list`、`githubUser.tags` 尚未实现（R05/R07），成功后改用 `trpc.githubUser.pathFilter()` 一次让 `githubUser.*` 下所有查询失效（覆盖 lookup/search 以及将来的 list/tags），不必等后续接口上线再补；`CONFLICT` 时用 `trpc.githubUser.lookup.pathFilter()`。两个回调都等失效的查询重新拉取完成后才结束，期间 `isPending` 保持为 true、按钮保持禁用，避免卡片切换前被再次点击。提交的用户名取 lookup 返回的 `login`。
+
 ## 涉及模块 / 文件
 
 | 文件 | 改动 |

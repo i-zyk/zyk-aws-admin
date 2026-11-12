@@ -1,6 +1,14 @@
+import { isUniqueConstraintError } from "@zyk-aws-admin/db";
 import z from "zod";
 
-import { type GithubProfileDto, toProfileDto } from "../github/mapper";
+import { AppCode, appError } from "../errors";
+import {
+	type GithubProfileDto,
+	type GithubUserRecordDto,
+	toGithubUserData,
+	toProfileDto,
+	toRecordDto,
+} from "../github/mapper";
 import { githubUsernameSchema, searchKeywordSchema } from "../github/schemas";
 import { protectedProcedure, router } from "../index";
 
@@ -8,8 +16,45 @@ const SEARCH_PAGE_SIZE = 10;
 const SEARCH_MAX_RESULTS = 1000;
 const SEARCH_MAX_PAGE = SEARCH_MAX_RESULTS / SEARCH_PAGE_SIZE;
 
+const alreadySavedError = (cause?: unknown) =>
+	appError("CONFLICT", AppCode.GITHUB_USER_ALREADY_SAVED, { cause });
+
 /** GitHub 用户名单相关接口，具体 procedure 在 R02～R10 中逐个加入 */
 export const githubUserRouter = router({
+	/**
+	 * 把 GitHub 用户加入名单：不走缓存重新拉取最新资料，按 githubId 判重后写库。
+	 * 先查后插之间的并发由 githubId 唯一约束兜底（P2002 → CONFLICT）；GitHub 出错时不写库。
+	 */
+	create: protectedProcedure
+		.input(z.object({ username: githubUsernameSchema }))
+		.mutation(async ({ ctx, input }): Promise<GithubUserRecordDto> => {
+			const profile = await ctx.github.getUserByLogin(input.username, {
+				cache: false,
+			});
+			const existing = await ctx.db.githubUser.findUnique({
+				select: { id: true },
+				where: { githubId: profile.id },
+			});
+			if (existing) {
+				throw alreadySavedError();
+			}
+			try {
+				const record = await ctx.db.githubUser.create({
+					data: {
+						...toGithubUserData(profile),
+						createdById: ctx.session.user.id,
+						syncedAt: new Date(),
+					},
+				});
+				return toRecordDto(record);
+			} catch (error) {
+				if (isUniqueConstraintError(error, "githubId")) {
+					throw alreadySavedError(error);
+				}
+				throw error;
+			}
+		}),
+
 	/**
 	 * 按用户名查看 GitHub 完整公开资料（添加前预览），只读不写数据库。
 	 * 用不会变的 githubId 判断是否已在名单中，GitHub 错误原样透传。

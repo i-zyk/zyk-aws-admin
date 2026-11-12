@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { inferRouterOutputs } from "@trpc/server";
 import { githubUsernameSchema } from "@zyk-aws-admin/api/github/schemas";
 import type { AppRouter } from "@zyk-aws-admin/api/routers/index";
@@ -10,16 +10,60 @@ import { Button, buttonVariants } from "@zyk-aws-admin/ui/components/button";
 import { Skeleton } from "@zyk-aws-admin/ui/components/skeleton";
 import type { Route } from "next";
 import Link from "next/link";
+import { useCallback } from "react";
+import { toast } from "sonner";
 
 import { GithubProfileCard } from "@/components/github-users/github-profile-card";
-import { getAppErrorMessage } from "@/lib/app-error";
+import { getAppCode, getAppErrorMessage } from "@/lib/app-error";
 import { useTRPC } from "@/utils/trpc";
 
 const LOOKUP_STALE_TIME_MS = 60_000;
 type LookupResult = inferRouterOutputs<AppRouter>["githubUser"]["lookup"];
 
-/** 卡片操作区：已在名单中显示「已在名单中」+「查看」，否则是「加入数据库」（R04 实现行为） */
-function PreviewActions({ savedId }: { savedId: LookupResult["savedId"] }) {
+/**
+ * 「加入数据库」（R04）：只提交用户名，服务端重新拉取 GitHub 资料后保存。
+ * 成功后让 githubUser 下所有查询（lookup/search/list/tags）失效；已在名单中（CONFLICT）时
+ * 让 lookup 失效，卡片切换为「已在名单中」。失效的查询重新拉取完成前按钮保持禁用，防止重复提交。
+ */
+function AddToListButton({ username }: { username: string }) {
+	const trpc = useTRPC();
+	const queryClient = useQueryClient();
+	const { isPending, mutate } = useMutation(
+		trpc.githubUser.create.mutationOptions({
+			onError: async (error) => {
+				toast.error(getAppErrorMessage(error));
+				if (getAppCode(error) === "GITHUB_USER_ALREADY_SAVED") {
+					await queryClient.invalidateQueries(
+						trpc.githubUser.lookup.pathFilter()
+					);
+				}
+			},
+			onSuccess: async () => {
+				toast.success("已添加");
+				await queryClient.invalidateQueries(trpc.githubUser.pathFilter());
+			},
+		})
+	);
+
+	const handleClick = useCallback(() => {
+		mutate({ username });
+	}, [mutate, username]);
+
+	return (
+		<Button disabled={isPending} onClick={handleClick} type="button">
+			{isPending ? "正在加入…" : "加入数据库"}
+		</Button>
+	);
+}
+
+/** 卡片操作区：已在名单中显示「已在名单中」+「查看」，否则是「加入数据库」 */
+function PreviewActions({
+	login,
+	savedId,
+}: {
+	login: string;
+	savedId: LookupResult["savedId"];
+}) {
 	if (savedId !== null) {
 		return (
 			<>
@@ -33,8 +77,7 @@ function PreviewActions({ savedId }: { savedId: LookupResult["savedId"] }) {
 			</>
 		);
 	}
-	// R04 实现「加入数据库」，这里先占位
-	return <Button disabled>加入数据库</Button>;
+	return <AddToListButton username={login} />;
 }
 
 function PreviewBody({
@@ -69,7 +112,7 @@ function PreviewBody({
 	}
 	return (
 		<GithubProfileCard profile={data}>
-			<PreviewActions savedId={data.savedId} />
+			<PreviewActions login={data.login} savedId={data.savedId} />
 		</GithubProfileCard>
 	);
 }
