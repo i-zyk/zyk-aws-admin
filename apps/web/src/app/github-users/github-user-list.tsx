@@ -54,7 +54,10 @@ import {
 	useState,
 } from "react";
 
+import { DeleteGithubUserDialog } from "@/components/github-users/delete-github-user-dialog";
+import { EditGithubUserDialog } from "@/components/github-users/edit-github-user-dialog";
 import { GithubAvatar } from "@/components/github-users/github-avatar";
+import { SyncGithubUserButton } from "@/components/github-users/sync-github-user-button";
 import { TagList } from "@/components/github-users/tag-list";
 import { getAppErrorMessage } from "@/lib/app-error";
 import { formatDateTime } from "@/lib/format-date-time";
@@ -302,7 +305,13 @@ const COLUMN_LABELS = [
 	"操作",
 ] as const;
 
-function UserRow({ user }: { user: ListItem }) {
+function UserRow({
+	user,
+	onDeleted,
+}: {
+	user: ListItem;
+	onDeleted: () => void;
+}) {
 	return (
 		<TableRow>
 			<TableCell>
@@ -331,18 +340,34 @@ function UserRow({ user }: { user: ListItem }) {
 				<time dateTime={user.syncedAt}>{formatDateTime(user.syncedAt)}</time>
 			</TableCell>
 			<TableCell>
-				<Link
-					className="underline underline-offset-4"
-					href={`/github-users/${user.id}`}
-				>
-					查看<span className="sr-only">：{user.login}</span>
-				</Link>
+				<div className="flex items-center gap-3">
+					<Link
+						className="underline underline-offset-4"
+						href={`/github-users/${user.id}`}
+					>
+						查看<span className="sr-only">：{user.login}</span>
+					</Link>
+					<EditGithubUserDialog record={user} />
+					<SyncGithubUserButton id={user.id} login={user.login} size="sm" />
+					<DeleteGithubUserDialog
+						id={user.id}
+						login={user.login}
+						onDeleted={onDeleted}
+						size="sm"
+					/>
+				</div>
 			</TableCell>
 		</TableRow>
 	);
 }
 
-function UserTable({ items }: { items: ListItem[] }) {
+function UserTable({
+	items,
+	onDeleted,
+}: {
+	items: ListItem[];
+	onDeleted: () => void;
+}) {
 	return (
 		<Table>
 			<TableHeader>
@@ -361,7 +386,7 @@ function UserTable({ items }: { items: ListItem[] }) {
 			</TableHeader>
 			<TableBody>
 				{items.map((user) => (
-					<UserRow key={user.id} user={user} />
+					<UserRow key={user.id} onDeleted={onDeleted} user={user} />
 				))}
 			</TableBody>
 		</Table>
@@ -595,11 +620,13 @@ function ListBody({
 	data,
 	error,
 	params,
+	onDeleted,
 	onRetry,
 }: {
 	data: ListResult | undefined;
 	error: unknown;
 	params: GithubUserListParams;
+	onDeleted: () => void;
 	onRetry: () => void;
 }) {
 	if (error) {
@@ -616,7 +643,7 @@ function ListBody({
 	}
 	return (
 		<>
-			<UserTable items={data.items} />
+			<UserTable items={data.items} onDeleted={onDeleted} />
 			<ListPagination params={params} total={data.total} />
 		</>
 	);
@@ -663,6 +690,13 @@ export function GithubUserList({ params }: { params: GithubUserListParams }) {
 	const handleRetry = useCallback(async () => {
 		await refetch();
 	}, [refetch]);
+	// 删掉的是当前页（非第 1 页）仅剩的一条时，列表刷新后该页为空，退回上一页（R09 design.md）
+	const isLastItemOnPage = query.data?.items.length === 1 && page > 1;
+	const handleDeleted = useCallback(() => {
+		if (isLastItemOnPage) {
+			router.replace(listHref({ ...params, page: page - 1 }));
+		}
+	}, [isLastItemOnPage, page, params, router]);
 
 	return (
 		<div className="mt-6 flex flex-col gap-4">
@@ -684,6 +718,7 @@ export function GithubUserList({ params }: { params: GithubUserListParams }) {
 				<ListBody
 					data={query.data}
 					error={query.error}
+					onDeleted={handleDeleted}
 					onRetry={handleRetry}
 					params={params}
 				/>

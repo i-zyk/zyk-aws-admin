@@ -74,3 +74,13 @@ export function isUniqueConstraintError(
 		field
 	);
 }
+
+const RECORD_NOT_FOUND_ERROR_CODE = "P2025";
+
+/** 是否为「要更新或删除的记录不存在」（Prisma P2025），例如 update 时记录已被并发删除 */
+export function isRecordNotFoundError(error: unknown): boolean {
+	return (
+		error instanceof Prisma.PrismaClientKnownRequestError &&
+		error.code === RECORD_NOT_FOUND_ERROR_CODE
+	);
+}

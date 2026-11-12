@@ -1,4 +1,7 @@
-import { isUniqueConstraintError } from "@zyk-aws-admin/db";
+import {
+	isRecordNotFoundError,
+	isUniqueConstraintError,
+} from "@zyk-aws-admin/db";
 import z from "zod";
 
 import { AppCode, appError } from "../errors";
@@ -13,6 +16,7 @@ import {
 	githubUserIdSchema,
 	githubUserListInputSchema,
 	githubUsernameSchema,
+	githubUserUpdateInputSchema,
 	searchKeywordSchema,
 } from "../github/schemas";
 import { protectedProcedure, router } from "../index";
@@ -99,6 +103,23 @@ export const githubUserRouter = router({
 				}
 				throw error;
 			}
+		}),
+
+	/**
+	 * 物理删除一条名单记录（R09，D2：不做回收站），备注和标签随记录一起删除，githubId 唯一约束随之释放。
+	 * 用 deleteMany 按删除行数判断记录是否存在：单条 DELETE 语句，并发删除同一条时后到的删到 0 行，
+	 * 不依赖驱动适配器下 P2025 的错误细节。
+	 */
+	delete: protectedProcedure
+		.input(z.object({ id: githubUserIdSchema }))
+		.mutation(async ({ ctx, input }): Promise<{ id: number }> => {
+			const { count } = await ctx.db.githubUser.deleteMany({
+				where: { id: input.id },
+			});
+			if (count === 0) {
+				throw appError("NOT_FOUND", AppCode.RECORD_NOT_FOUND);
+			}
+			return { id: input.id };
 		}),
 
 	/**
@@ -207,6 +228,44 @@ export const githubUserRouter = router({
 			};
 		}),
 
+	/**
+	 * 从 GitHub 同步一条记录：先查本地（不存在时不消耗 GitHub 额度），再按不会变的 githubId
+	 * 不走缓存拉取最新资料（对方改名也能同步到），只覆盖 GitHub 字段和 syncedAt，备注、标签、添加人不变。
+	 * GitHub 错误原样透传、不写库；同步过程中记录被删除（P2025）→ RECORD_NOT_FOUND。
+	 */
+	sync: protectedProcedure
+		.input(z.object({ id: githubUserIdSchema }))
+		.mutation(async ({ ctx, input }): Promise<GithubUserRecordDto> => {
+			const record = await ctx.db.githubUser.findUnique({
+				select: { githubId: true },
+				where: { id: input.id },
+			});
+			if (!record) {
+				throw appError("NOT_FOUND", AppCode.RECORD_NOT_FOUND);
+			}
+			const profile = await ctx.github.getUserById(record.githubId);
+			if (profile.id !== record.githubId) {
+				// 理论上不会发生；防御性处理，不把别人的资料写进这条记录
+				throw appError("BAD_GATEWAY", AppCode.GITHUB_UNAVAILABLE, {
+					message: `GitHub 返回的 id ${profile.id} 与记录的 githubId ${record.githubId} 不一致`,
+				});
+			}
+			try {
+				const updated = await ctx.db.githubUser.update({
+					data: { ...toGithubUserData(profile), syncedAt: new Date() },
+					where: { id: input.id },
+				});
+				return toRecordDto(updated);
+			} catch (error) {
+				if (isRecordNotFoundError(error)) {
+					throw appError("NOT_FOUND", AppCode.RECORD_NOT_FOUND, {
+						cause: error,
+					});
+				}
+				throw error;
+			}
+		}),
+
 	/** 所有用过的标签，去重后按字母顺序排列（Prisma 没有数组展开去重的 API，用原生 SQL） */
 	tags: protectedProcedure.query(async ({ ctx }): Promise<string[]> => {
 		const rows = await ctx.db.$queryRaw<{ tag: string }[]>`
@@ -214,4 +273,29 @@ export const githubUserRouter = router({
 		`;
 		return rows.map((row) => row.tag);
 	}),
+
+	/**
+	 * 修改备注和标签：只写 remark、tags 两个后台字段，GitHub 字段只能通过同步更新。
+	 * 输入已由共享规则规范化（trim、空备注转 null、标签去空去重）；不传的字段为 undefined，Prisma 不更新。
+	 * 记录不存在（P2025）→ NOT_FOUND / RECORD_NOT_FOUND；并发修改后写覆盖先写。
+	 */
+	update: protectedProcedure
+		.input(githubUserUpdateInputSchema)
+		.mutation(async ({ ctx, input }): Promise<GithubUserRecordDto> => {
+			const { id, remark, tags } = input;
+			try {
+				const record = await ctx.db.githubUser.update({
+					data: { remark, tags },
+					where: { id },
+				});
+				return toRecordDto(record);
+			} catch (error) {
+				if (isRecordNotFoundError(error)) {
+					throw appError("NOT_FOUND", AppCode.RECORD_NOT_FOUND, {
+						cause: error,
+					});
+				}
+				throw error;
+			}
+		}),
 });

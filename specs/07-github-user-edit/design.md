@@ -26,6 +26,8 @@
   }).strict(); // 多余字段 → BAD_REQUEST
   ```
   「最多 10 个」在去重、去空之后计算（技术参考未规定，暂按此）。标签去重区分大小写。
+  - 实现调整：备注拆成 `remarkTextSchema`（只接受字符串，供编辑表单的字段校验用）和 `remarkSchema = remarkTextSchema.nullable()`（接口输入用），两者规则相同；`.strict()` 用 Zod 4 的等价写法 `z.strictObject(...)`；`id` 复用已有的 `githubUserIdSchema`。原因：TanStack Form 的备注字段值始终是字符串，表单校验不需要接受 `null`。
+  - `P2025` 判断复用 R08 在 `@zyk-aws-admin/db` 中新增的 `isRecordNotFoundError`。
 - **`githubUser.update`**：`ctx.db.githubUser.update({ where: { id }, data: { remark, tags } })`（`undefined` 的字段不更新）；捕获 `P2025` → `NOT_FOUND` / `RECORD_NOT_FOUND`。返回 `toRecordDto`。
 - **编辑表单** `apps/web/src/components/github-users/edit-github-user-form.tsx`：备注 `Textarea`（显示字数）、标签输入（输入后回车或逗号添加为徽标，可删除；技术参考未规定，暂按此交互）。用同一套 Zod 规则校验。成功后 `toast.success("已保存")`，让 `byId`、`list`、`tags` 失效。
   - 详情页：后台信息区块的「编辑」按钮打开 `Dialog` 中的表单。

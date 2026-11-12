@@ -25,13 +25,15 @@ export const searchKeywordSchema = z
 		`关键字最多 ${SEARCH_KEYWORD_MAX_LENGTH} 个字符`
 	);
 
-/** 备注：去掉首尾空格，最多 500 个字符；空字符串和 null 都存为 null */
-export const remarkSchema = z
+/** 备注文字（编辑表单用，输入只能是字符串）：去掉首尾空格，最多 500 个字符；空字符串转成 null */
+export const remarkTextSchema = z
 	.string()
 	.trim()
 	.max(REMARK_MAX_LENGTH, `备注最多 ${REMARK_MAX_LENGTH} 个字符`)
-	.nullable()
 	.transform((remark) => (remark === "" ? null : remark));
+
+/** 备注（接口输入）：规则同 remarkTextSchema，另外接受 null；空字符串和 null 都存为 null */
+export const remarkSchema = remarkTextSchema.nullable();
 
 const uniqueNonEmpty = (tags: string[]): string[] =>
 	Array.from(new Set(tags.filter((tag) => tag !== "")));
@@ -60,6 +62,20 @@ export const githubUserIdSchema = z
 	.int()
 	.positive()
 	.max(GITHUB_USER_ID_MAX);
+
+// ---- 修改备注和标签（R07）：编辑表单和 githubUser.update 输入共用 ----
+
+/**
+ * githubUser.update 输入：只接受 id、remark、tags，带其他字段（如 name、followers）直接 BAD_REQUEST；
+ * 不传的字段不修改，remark 为 null 或空串表示清空。
+ */
+export const githubUserUpdateInputSchema = z.strictObject({
+	id: githubUserIdSchema,
+	remark: remarkSchema.optional(),
+	tags: tagsSchema.optional(),
+});
+
+export type GithubUserUpdateInput = z.input<typeof githubUserUpdateInputSchema>;
 
 // ---- 名单列表（R05）：URL 参数解析和 githubUser.list 输入共用 ----
 

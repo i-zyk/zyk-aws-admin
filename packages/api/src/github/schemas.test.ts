@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+	GITHUB_USER_ID_MAX,
 	githubUsernameSchema,
+	githubUserUpdateInputSchema,
 	REMARK_MAX_LENGTH,
 	remarkSchema,
+	remarkTextSchema,
 	SEARCH_KEYWORD_MAX_LENGTH,
 	searchKeywordSchema,
 	TAG_MAX_LENGTH,
@@ -145,5 +148,143 @@ describe("tagsSchema", () => {
 		const tag = "a".repeat(TAG_MAX_LENGTH);
 		expect(tagsSchema.parse([tag])).toEqual([tag]);
 		expect(tagsSchema.safeParse([`${tag}a`]).success).toBe(false);
+	});
+});
+
+describe("remarkSchema 边界（R07）", () => {
+	const REMARK_TOO_LONG_ERROR = `备注最多 ${REMARK_MAX_LENGTH} 个字符`;
+
+	it("500 个字符通过，501 个字符不通过并提示", () => {
+		const remark = "备".repeat(REMARK_MAX_LENGTH);
+		expect(remarkSchema.parse(remark)).toBe(remark);
+		const result = remarkSchema.safeParse(`${remark}注`);
+		expect(result.success).toBe(false);
+		expect(firstIssueMessage(result)).toBe(REMARK_TOO_LONG_ERROR);
+	});
+
+	it("首尾空格不计入长度：500 个字符加首尾空格仍通过", () => {
+		const remark = "a".repeat(REMARK_MAX_LENGTH);
+		expect(remarkSchema.parse(`  ${remark}\n `)).toBe(remark);
+	});
+
+	it("保留中间的换行和空格", () => {
+		expect(remarkSchema.parse("  第一行\n 第二行  ")).toBe("第一行\n 第二行");
+	});
+
+	it("只有换行、制表符等空白时转成 null", () => {
+		expect(remarkSchema.parse("\n\t  \n")).toBeNull();
+	});
+});
+
+describe("remarkTextSchema（编辑表单）", () => {
+	it("规则与 remarkSchema 相同，但不接受 null", () => {
+		expect(remarkTextSchema.parse("  备注  ")).toBe("备注");
+		expect(remarkTextSchema.parse("  ")).toBeNull();
+		expect(
+			remarkTextSchema.safeParse("a".repeat(REMARK_MAX_LENGTH + 1)).success
+		).toBe(false);
+		expect(remarkTextSchema.safeParse(null).success).toBe(false);
+	});
+});
+
+describe("tagsSchema 边界（R07）", () => {
+	const TAGS_TOO_MANY_ERROR = `标签最多 ${TAGS_MAX_COUNT} 个`;
+	const TAG_TOO_LONG_ERROR = `每个标签最多 ${TAG_MAX_LENGTH} 个字符`;
+	const tenTags = Array.from(
+		{ length: TAGS_MAX_COUNT },
+		(_, index) => `标签${index}`
+	);
+
+	it("去掉首尾空格后去重，保留第一次出现的顺序", () => {
+		expect(tagsSchema.parse(["b", " a ", "a", "b ", "c"])).toEqual([
+			"b",
+			"a",
+			"c",
+		]);
+	});
+
+	it("去重区分大小写", () => {
+		expect(tagsSchema.parse(["Go", "go", "GO"])).toEqual(["Go", "go", "GO"]);
+	});
+
+	it("全部是空格时规范化为空数组", () => {
+		expect(tagsSchema.parse(["", "  ", "\t"])).toEqual([]);
+		expect(tagsSchema.parse([])).toEqual([]);
+	});
+
+	it("10 个通过；11 个不通过并提示", () => {
+		expect(tagsSchema.parse(tenTags)).toEqual(tenTags);
+		const result = tagsSchema.safeParse([...tenTags, "第十一个"]);
+		expect(result.success).toBe(false);
+		expect(firstIssueMessage(result)).toBe(TAGS_TOO_MANY_ERROR);
+	});
+
+	it("去重、去空之后不超过 10 个即通过（原始 15 个）", () => {
+		const raw = [...tenTags, " 标签0 ", "", "标签1", "   ", "标签9"];
+		expect(raw).toHaveLength(15);
+		expect(tagsSchema.parse(raw)).toEqual(tenTags);
+	});
+
+	it("单个标签 20 个字符通过，21 个字符不通过并提示", () => {
+		const tag = "标".repeat(TAG_MAX_LENGTH);
+		expect(tagsSchema.parse([tag])).toEqual([tag]);
+		const result = tagsSchema.safeParse([`${tag}签`]);
+		expect(result.success).toBe(false);
+		expect(firstIssueMessage(result)).toBe(TAG_TOO_LONG_ERROR);
+	});
+
+	it("单个标签首尾空格不计入长度", () => {
+		const tag = "a".repeat(TAG_MAX_LENGTH);
+		expect(tagsSchema.parse([`  ${tag}  `])).toEqual([tag]);
+	});
+});
+
+describe("githubUserUpdateInputSchema", () => {
+	it("只传 id 时 remark、tags 都是 undefined（不修改）", () => {
+		expect(githubUserUpdateInputSchema.parse({ id: 1 })).toEqual({ id: 1 });
+	});
+
+	it("规范化 remark 和 tags", () => {
+		expect(
+			githubUserUpdateInputSchema.parse({
+				id: 1,
+				remark: "  备注  ",
+				tags: [" a ", "a", ""],
+			})
+		).toEqual({ id: 1, remark: "备注", tags: ["a"] });
+	});
+
+	it("remark 为 null 或空串时为 null（清空）", () => {
+		expect(githubUserUpdateInputSchema.parse({ id: 1, remark: null })).toEqual({
+			id: 1,
+			remark: null,
+		});
+		expect(githubUserUpdateInputSchema.parse({ id: 1, remark: " " })).toEqual({
+			id: 1,
+			remark: null,
+		});
+	});
+
+	it.each([
+		["name", { name: "改名" }],
+		["followers", { followers: 1 }],
+		["login", { login: "other" }],
+		["githubId", { githubId: 2 }],
+		["createdById", { createdById: "someone" }],
+	])("带多余字段 %s 不通过", (_label, extra) => {
+		expect(
+			githubUserUpdateInputSchema.safeParse({ id: 1, tags: [], ...extra })
+				.success
+		).toBe(false);
+	});
+
+	it.each([0, -1, 1.5, GITHUB_USER_ID_MAX + 1])("id 为 %d 不通过", (id) => {
+		expect(githubUserUpdateInputSchema.safeParse({ id }).success).toBe(false);
+	});
+
+	it("缺少 id 不通过", () => {
+		expect(githubUserUpdateInputSchema.safeParse({ tags: [] }).success).toBe(
+			false
+		);
 	});
 });

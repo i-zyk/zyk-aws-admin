@@ -17,13 +17,16 @@
 3. `update({ where: { id }, data: { ...toGithubUserData(profile), syncedAt: new Date() } })`：`toGithubUserData` 只包含 GitHub 字段，不含 `remark`、`tags`、`createdById`。更新时 `P2025`（同步过程中被删除）→ `RECORD_NOT_FOUND`。
 4. 返回 `toRecordDto`。
 
-前端：`apps/web/src/components/github-users/sync-github-user-button.tsx`，列表行和详情页共用。成功 `toast.success("已同步")` 并让 `byId`、`list` 失效；失败按 `appCode` 提示，`GITHUB_USER_NOT_FOUND` 在同步场景显示「该账号在 GitHub 上已不存在」（R00 `app-error.ts` 的 `scene: "sync"`）。
+前端：`apps/web/src/components/github-users/sync-github-user-button.tsx`，列表行和详情页共用。成功 `toast.success("已同步")` 并让 `byId`、`list` 失效；失败按 `appCode` 提示，`GITHUB_USER_NOT_FOUND` 在同步场景显示「该账号在 GitHub 上已不存在」（R00 `app-error.ts` 的 `scene: "sync"`）。失败为 `RECORD_NOT_FOUND`（记录已被别处删除）时同样让 `byId`、`list` 失效，详情页随之显示「记录不存在」、列表去掉该行。详情页只在记录加载成功后显示按钮；列表操作列是「查看」+「同步」，按钮带读屏文字「：{login}」区分行。
+
+> 实现时补充（2026-11-11）：P2025 判断放进 `@zyk-aws-admin/db` 的 `isRecordNotFoundError`，理由同 R04 的 `isUniqueConstraintError`（api 包不直接导入 Prisma）；增加 `RECORD_NOT_FOUND` 时失效查询，避免页面停留在已删除的记录上。
 
 ## 涉及模块 / 文件
 
 | 文件 | 改动 |
 | --- | --- |
 | `packages/api/src/routers/github-user.ts` | 新增 `sync` |
+| `packages/db/src/index.ts` | 新增 `isRecordNotFoundError(error)`（判断 P2025，和 `isUniqueConstraintError` 并列；api 包不直接依赖 Prisma 错误类） |
 | `packages/api/src/routers/github-user.sync.test.ts` | 新增测试 |
 | `apps/web/src/components/github-users/sync-github-user-button.tsx` | 新增 |
 | `apps/web/src/app/github-users/[id]/github-user-detail.tsx` | 加「同步」按钮 |
