@@ -24,12 +24,13 @@
   ```
   用 `ctx.db.$transaction([findMany({ where, orderBy, skip, take }), count({ where })])` 一次取数据和总数。输出 `{ items: toRecordDto[], page, pageSize, total }`。
 - **`githubUser.tags`**：``ctx.db.$queryRaw`SELECT DISTINCT unnest(tags) AS tag FROM github_user ORDER BY tag` ``，返回 `string[]`（技术参考未规定，暂按原生 SQL，Prisma 没有对数组去重展开的 API）。
-- **页面** `/github-users`：`page.tsx`（服务端）读取 `searchParams` 交给客户端组件 `github-user-list.tsx`。客户端用一个 Zod 规则解析 URL 参数（每个字段 `.catch(默认值)`，不合法时回退默认），筛选控件变化时 `router.replace` 更新 URL 并把页码重置为 1。
+- **页面** `/github-users`：`page.tsx`（服务端）读取 `searchParams`，用 `list-params.ts` 里的 Zod 规则解析（每个字段 `.catch(默认值)`，不合法时回退默认）后交给客户端组件 `github-user-list.tsx`；筛选控件变化时 `router.replace` 更新 URL 并把页码重置为 1。（W4 调整：解析规则放进服务端和客户端共用的 `list-params.ts`，在 page.tsx 调用，客户端拿到的已是合法参数；生成链接 `listHref` 也在这里，保证默认值不写进 URL。）
   - 关键字输入框：提交（回车或「筛选」按钮）时才更新 URL，避免每输入一个字就请求（技术参考未规定，暂按此）。
   - 标签下拉：选项来自 `githubUser.tags`，包含「全部标签」。
   - 排序：下拉选择字段 + 升/降序切换。
   - 每页条数：10/20/50 下拉。
   - 查询使用 `placeholderData: keepPreviousData`，翻页时不闪烁。
+  - 分页：页码、上一页、下一页用 Next.js `<Link>` + `buttonVariants` 放在 shadcn `Pagination` 里（W4 调整：shadcn 的 `PaginationLink` 渲染原生 `<a>`，点击会整页刷新）。
 - **性能**：1000 行规模下 `ILIKE '%q%'` 顺序扫描足够快；`createdAt`、`tags`(GIN) 已有索引，`followers`、`syncedAt` 排序 1000 行内存排序可接受。验收用测试中的计时断言。
 
 ## 涉及模块 / 文件
@@ -42,6 +43,7 @@
 | `packages/ui/src/components/` | `npx shadcn@latest add table select pagination -c packages/ui` |
 | `apps/web/src/app/github-users/page.tsx` | 替换 R01 的占位页 |
 | `apps/web/src/app/github-users/github-user-list.tsx` | 新增（客户端）：筛选栏、表格、分页、状态 |
+| `apps/web/src/app/github-users/list-params.ts` | 新增：URL 参数解析（不合法回退默认）、生成列表链接（W4 补充） |
 | `apps/web/src/components/github-users/tag-list.tsx` | 新增：标签徽标列表，R06 复用 |
 
 ## 数据模型

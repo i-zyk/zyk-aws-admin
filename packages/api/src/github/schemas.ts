@@ -49,6 +49,53 @@ export const tagsSchema = z
 		z.array(z.string()).max(TAGS_MAX_COUNT, `标签最多 ${TAGS_MAX_COUNT} 个`)
 	);
 
+// ---- 名单列表（R05）：URL 参数解析和 githubUser.list 输入共用 ----
+
+export const GITHUB_USER_LIST_SORT_FIELDS = [
+	"createdAt",
+	"followers",
+	"syncedAt",
+] as const;
+export const GITHUB_USER_LIST_ORDERS = ["asc", "desc"] as const;
+export const GITHUB_USER_LIST_PAGE_SIZES = [10, 20, 50] as const;
+export const GITHUB_USER_LIST_DEFAULT_PAGE_SIZE = 20;
+
+export const githubUserListSortSchema = z.enum(GITHUB_USER_LIST_SORT_FIELDS);
+export const githubUserListOrderSchema = z.enum(GITHUB_USER_LIST_ORDERS);
+export const githubUserListPageSizeSchema = z.union(
+	GITHUB_USER_LIST_PAGE_SIZES.map((size) => z.literal(size))
+);
+
+/** 名单列表查询：q、tag 为空字符串时视为不过滤；pageSize 只接受 10/20/50 */
+export const githubUserListInputSchema = z.object({
+	order: githubUserListOrderSchema.default("desc"),
+	page: z.number().int().min(1).default(1),
+	pageSize: githubUserListPageSizeSchema.default(
+		GITHUB_USER_LIST_DEFAULT_PAGE_SIZE
+	),
+	q: z
+		.string()
+		.trim()
+		.max(
+			SEARCH_KEYWORD_MAX_LENGTH,
+			`关键字最多 ${SEARCH_KEYWORD_MAX_LENGTH} 个字符`
+		)
+		.optional(),
+	sort: githubUserListSortSchema.default("createdAt"),
+	tag: z
+		.string()
+		.trim()
+		.max(TAG_MAX_LENGTH, `每个标签最多 ${TAG_MAX_LENGTH} 个字符`)
+		.optional(),
+});
+
+export type GithubUserListInput = z.input<typeof githubUserListInputSchema>;
+export type GithubUserListSort = z.infer<typeof githubUserListSortSchema>;
+export type GithubUserListOrder = z.infer<typeof githubUserListOrderSchema>;
+export type GithubUserListPageSize = z.infer<
+	typeof githubUserListPageSizeSchema
+>;
+
 // ---- GitHub 响应（只保留需要的字段，其余字段由 zod 默认丢弃） ----
 
 const githubIdSchema = z.int().positive();
