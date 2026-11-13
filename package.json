@@ -1,27 +1,28 @@
 {
   "name": "zyk-aws-admin",
   "private": true,
+  "type": "module",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
-  "type": "module",
   "scripts": {
-    "dev": "turbo run dev",
+    "auth:generate": "cd apps/server && pnpm run auth:generate",
     "build": "turbo run build",
+    "check": "ultracite check",
     "check-types": "turbo run check-types",
-    "dev:native": "turbo run dev -F native --",
-    "dev:web": "turbo run dev -F web --",
-    "dev:server": "turbo run dev -F server --",
-    "db:push": "turbo run db:push -F @zyk-aws-admin/db --",
-    "db:studio": "turbo run db:studio -F @zyk-aws-admin/db --",
     "db:generate": "turbo run db:generate -F @zyk-aws-admin/db --",
     "db:migrate": "turbo run db:migrate -F @zyk-aws-admin/db --",
+    "db:push": "turbo run db:push -F @zyk-aws-admin/db --",
+    "db:studio": "turbo run db:studio -F @zyk-aws-admin/db --",
+    "dev": "turbo run dev",
+    "dev:native": "turbo run dev -F native --",
+    "dev:server": "turbo run dev -F server --",
+    "dev:web": "turbo run dev -F web --",
     "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./apps/native/ && varlock codegen --path ./packages/db/",
+    "fix": "ultracite fix",
     "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./apps/server/ && varlock codegen --path ./apps/native/ && varlock codegen --path ./packages/db/",
-    "auth:generate": "cd apps/server && pnpm run auth:generate",
-    "check": "ultracite check",
-    "fix": "ultracite fix"
+    "test": "turbo run test"
   },
   "dependencies": {
     "zod": "catalog:"

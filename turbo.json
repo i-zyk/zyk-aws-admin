@@ -38,6 +38,9 @@
     "db:studio": {
       "cache": false,
       "persistent": true
+    },
+    "test": {
+      "cache": false
     }
   },
   "globalEnv": [
@@ -47,6 +50,7 @@
     "CORS_ORIGIN",
     "DATABASE_URL",
     "EXPO_PUBLIC_SERVER_URL",
+    "GITHUB_TOKEN",
     "NEXT_PUBLIC_SERVER_URL",
     "NODE_ENV",
     "VERCEL",

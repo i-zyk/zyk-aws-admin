@@ -1,0 +1,31 @@
+model GithubUser {
+  id              Int      @id @default(autoincrement())
+  githubId        Int      @unique                 // GitHub 数字 ID，用来判重和同步
+  login           String                           // GitHub 用户名（可能改名，所以不设唯一）
+  name            String?
+  avatarUrl       String
+  htmlUrl         String
+  bio             String?
+  company         String?
+  blog            String?
+  location        String?
+  email           String?
+  twitterUsername String?
+  publicRepos     Int      @default(0)
+  publicGists     Int      @default(0)
+  followers       Int      @default(0)
+  following       Int      @default(0)
+  githubCreatedAt DateTime
+  githubUpdatedAt DateTime
+  remark          String?  @db.VarChar(500)        // 后台备注
+  tags            String[] @default([])            // 后台标签
+  createdById     String                           // 添加人，对应 user.id
+  syncedAt        DateTime                         // 最后一次从 GitHub 同步的时间
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([login])
+  @@index([tags], type: Gin)
+  @@index([createdAt])
+  @@map("github_user")
+}

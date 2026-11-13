@@ -6,7 +6,12 @@ html {
   scrollbar-gutter: stable;
 }
 
+/*
+ * 页面已用 scrollbar-gutter 预留滚动条位置，react-remove-scroll 锁定滚动时无需再补右边距。
+ * 选择器特异性高于 react-remove-scroll 注入的 body[data-scroll-locked]，不需要 !important。
+ * 注意：它注入的 margin-right 带 !important，本规则覆盖不了；目前只有未使用的 flux 布局会用到 react-remove-scroll。
+ */
 html > body[data-scroll-locked] {
-  margin-right: 0px !important;
-  --removed-body-scroll-bar-size: 0px !important;
+  margin-right: 0px;
+  --removed-body-scroll-bar-size: 0px;
 }
