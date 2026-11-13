@@ -1,3 +1,5 @@
+"use strict";
+
 const {
 	withVarlockMetroConfig,
 } = require("@varlock/expo-integration/metro-config");
@@ -8,7 +10,7 @@ const {
 } = require("react-native-reanimated/metro-config");
 
 /** @type {import('expo/metro-config').MetroConfig} */
-const config = getDefaultConfig(import.meta.dirname);
+const config = getDefaultConfig(__dirname);
 
 const uniwindConfig = withUniwindConfig(wrapWithReanimatedMetroConfig(config), {
 	cssEntryFile: "./global.css",

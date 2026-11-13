@@ -36,6 +36,8 @@
       "!.workflow",
       "!**/prisma/generated",
       "!apps/*/src/env.ts",
+      "!apps/native/expo-env.d.ts",
+      "!apps/native/uniwind-types.d.ts",
       "!packages/*/src/env.ts"
     ]
   },
