@@ -1,8 +1,8 @@
 # zyk-aws-admin 项目说明
 
-由 [Better-T-Stack](https://better-t-stack.dev) v3.49.0 生成的 TypeScript 全栈 monorepo（生成参数见 `bts.jsonc`）。目前仍是脚手架状态，业务功能尚未开发，`specs/` 为空目录。
+由 [Better-T-Stack](https://better-t-stack.dev) v3.49.0 生成的 TypeScript 全栈 monorepo（生成参数见 `bts.jsonc`）。
 
-**第一个业务功能**：`docs/需求.md` 描述了「GitHub 用户管理后台」（按用户名查询 GitHub 资料，并对保存的记录增删改查），在现有技术栈上实现，目前尚未开发。
+**已实现的业务功能**：`docs/需求.md`（PRD v0.3）描述的「GitHub 用户管理后台」已在分支 `workflow/20261110` 上完成（R00～R11，规格见 `specs/`）：开放注册 + 登录限流、模糊搜索 GitHub 用户、查看资料、加入数据库、名单列表（搜索/标签筛选/排序/分页）、详情、修改备注和标签、从 GitHub 同步、删除和批量删除。移动端未接入，生产部署尚未确定。
 
 ## 技术栈
 
@@ -27,9 +27,9 @@ zyk-aws-admin/
 ├── apps/
 │   ├── web/                # Next.js 管理后台，端口 3001
 │   │   └── src/
-│   │       ├── app/        # 路由：/、/login、/dashboard（服务端校验会话，未登录跳转 /login）
-│   │       ├── components/ # header、providers、登录/注册表单、user-menu、主题切换
-│   │       ├── lib/auth-client.ts  # Better Auth React 客户端
+│   │       ├── app/        # 路由：/login；/github-users（名单）、/github-users/new（搜索并加入）、/github-users/[id]（详情）；/ 和 /dashboard 重定向到 /github-users
+│   │       ├── components/ # header、providers、登录/注册表单、user-menu、主题切换；github-users/ 下为头像、资料卡、编辑/删除/批量删除对话框、同步按钮等
+│   │       ├── lib/        # auth-client（Better Auth React 客户端）、require-session（后台页面鉴权）、app-error（错误码转提示）
 │   │       └── utils/trpc.ts       # tRPC 客户端 + QueryClient（全局 onError 弹 toast）
 │   ├── native/             # Expo 移动端（scheme: zyk-aws-admin）
 │   │   ├── app/            # Expo Router：_layout → (drawer) → (tabs)，另有 modal、+not-found
@@ -41,23 +41,28 @@ zyk-aws-admin/
 │   ├── server/             # Hono API 服务，端口 3000
 │   │   └── src/
 │   │       ├── index.ts    # 入口：logger、CORS、/api/auth/*、/trpc/*、GET / 健康检查
-│   │       ├── services.ts # 组装根：根据 ENV 创建 db 和 auth 单例
-│   │       ├── context.ts  # tRPC 上下文 { db, session }
+│   │       ├── services.ts # 组装根：根据 ENV 创建 db、auth、github（GitHub 客户端）单例
+│   │       ├── context.ts  # tRPC 上下文 { db, github, session }
 │   │       └── env.server.ts   # 加载 varlock/auto-load 并导出 ENV
 │   └── fumadocs/           # 文档站，端口 4000；content/docs/*.mdx 为文档内容
 ├── packages/
 │   ├── api/                # @zyk-aws-admin/api：tRPC 实例、publicProcedure/protectedProcedure、appRouter
+│   │   └── src/
+│   │       ├── routers/github-user.ts  # githubUser.*：search、lookup、create、list、tags、byId、update、sync、delete、deleteMany
+│   │       ├── github/     # GitHub REST 客户端（createGithubClient）、响应 schema、映射、缓存
+│   │       └── errors.ts   # 业务错误码 AppCode 和 appError()，经 errorFormatter 放进 data.appCode
 │   ├── auth/               # @zyk-aws-admin/auth：createAuth(env, db) 工厂函数、Session 类型
 │   ├── db/                 # @zyk-aws-admin/db：createPrismaClient(env) 工厂函数、Prisma schema 和迁移
 │   │   └── prisma/
 │   │       ├── schema/schema.prisma  # 生成器和数据源配置
 │   │       ├── schema/auth.prisma    # Better Auth 表（User/Session/Account/Verification），由 auth:generate 生成
-│   │       ├── migrations/           # 目前为空
+│   │       ├── schema/github-user.prisma  # GithubUser 表（保存的 GitHub 用户名单）
+│   │       ├── migrations/           # 20261110142224_init 起
 │   │       └── generated/            # Prisma Client 输出目录（已加入 gitignore）
 │   ├── ui/                 # @zyk-aws-admin/ui：共享的 shadcn 组件、globals.css 设计变量（只有 web 在用）
 │   └── config/             # @zyk-aws-admin/config：tsconfig.base.json（strict、noUncheckedIndexedAccess）
-├── docs/需求.md            # PRD（当前为空）
-├── specs/                  # 需求拆分后的规格目录（当前为空）
+├── docs/需求.md            # PRD（v0.3，GitHub 用户管理后台）
+├── specs/                  # 需求拆分后的规格目录：README.md 总览 + 00-foundation～11-legacy-lint-cleanup
 ├── .agents/skills/         # 项目级 AI 技能；.claude/skills/ 是指向这里的符号链接
 ├── .mcp.json               # MCP：better-t-stack、context7、shadcn、next-devtools、better-auth、expo
 ├── biome.json / turbo.json / pnpm-workspace.yaml / bts.jsonc
@@ -76,14 +81,14 @@ native (Expo) ────────┘   原生端：authClient.getCookie() �
 - **依赖方向**：`apps/server` → `api` → `auth` → `db`；`apps/web` 和 `apps/native` 只从 `api` 导入 `AppRouter` **类型**，不导入任何运行时代码。`ui` 只被 `web` 使用。
 - **依赖注入**：共享包不直接读取环境变量。`db` 和 `auth` 只导出工厂函数（`createPrismaClient(env)`、`createAuth(env, db)`），由 `apps/server/src/services.ts` 统一传入 `ENV` 并创建单例。新增需要配置的共享包时沿用这种方式。
 - **内部包不单独构建**：各包的 `exports` 直接指向 `src/*.ts` 源码；server 用 `tsdown` 打包时，通过 `alwaysBundle: [/@zyk-aws-admin\/.*/]` 把内部包一起打进产物。
-- **tRPC**：在 `packages/api/src/routers/` 中新增 router，并合并进 `appRouter`。需要登录的接口用 `protectedProcedure`（没有会话时抛 `UNAUTHORIZED`，`ctx.session` 保证非空）。上下文为 `{ db: Database, session: Session | null }`。
-- **认证**：Better Auth 挂载在 server 的 `/api/auth/*`。Cookie 设置为 `sameSite=none; secure; httpOnly`，允许跨域。`trustedOrigins` 包含 `CORS_ORIGIN`、`zyk-aws-admin://`、`exp://`、`http://localhost:8081`。web 的 `/dashboard` 在服务端调用 `authClient.getSession({ headers })` 判断是否登录。
+- **tRPC**：在 `packages/api/src/routers/` 中新增 router，并合并进 `appRouter`。需要登录的接口用 `protectedProcedure`（没有会话时抛 `UNAUTHORIZED`，`ctx.session` 保证非空）。上下文为 `{ db: Database, github: GithubClient, session: Session | null }`。业务错误用 `packages/api/src/errors.ts` 的 `appError()` 抛出，前端按 `data.appCode` 显示提示。
+- **认证**：Better Auth 挂载在 server 的 `/api/auth/*`。Cookie 设置为 `sameSite=none; secure; httpOnly`，允许跨域。`trustedOrigins` 包含 `CORS_ORIGIN`、`zyk-aws-admin://`、`exp://`、`http://localhost:8081`。注册和登录接口按 IP 限流（各自 60 秒 5 次，计数在进程内存）。web 的后台页面（layout 和每个 page）都调用 `@/lib/require-session` 的 `requireSession()` 在服务端校验会话，未登录跳转 `/login`。
 - **数据库**：Prisma 使用多文件 schema（`prisma/schema/` 目录）。修改 schema 后需要执行 `db:generate`；新增或调整 Better Auth 插件后，先执行 `auth:generate` 重新生成 `auth.prisma`，再执行迁移。
 
 ## 环境变量（Varlock）
 
 - 每个应用在 `.env.schema` 中声明变量（已提交），真实值放在 `.env`（已忽略）。`src/env.ts` 是生成文件，**不要手改**，也不要提交。修改 schema 后执行 `pnpm run env:generate`（`postinstall` 也会自动执行）。
-- `apps/server`：`NODE_ENV`、`BETTER_AUTH_SECRET`（长度 ≥ 32）、`BETTER_AUTH_URL`、`CORS_ORIGIN`、`DATABASE_URL`
+- `apps/server`：`NODE_ENV`、`BETTER_AUTH_SECRET`（长度 ≥ 32）、`BETTER_AUTH_URL`、`CORS_ORIGIN`、`DATABASE_URL`、`GITHUB_TOKEN`（可选、敏感；只读公开资料，不配置时 GitHub 搜索每分钟 10 次、资料查询每小时 60 次）
 - `apps/web`：`NEXT_PUBLIC_SERVER_URL`；`apps/native`：`EXPO_PUBLIC_SERVER_URL`
 - `packages/db/.env.schema` 从 `apps/server` 中 `@import` 出 `DATABASE_*`，所以 Prisma CLI 能读到同一份配置。
 - 新增全局环境变量时，同时加到 `turbo.json` 的 `globalEnv` 中。
@@ -95,10 +100,12 @@ native (Expo) ────────┘   原生端：authClient.getCookie() �
 | `pnpm install` | 安装依赖，并自动生成 env 类型 |
 | `pnpm run db:generate` | 生成 Prisma Client（开发、类型检查、构建之前都需要先执行） |
 | `pnpm run db:push` / `db:migrate` / `db:studio` | 同步 schema / 创建迁移 / 打开 Prisma Studio |
+| `pnpm -F @zyk-aws-admin/db run db:migrate:deploy` | 把已有迁移应用到数据库（不生成新迁移） |
 | `pnpm run auth:generate` | 根据 Better Auth 配置重新生成 `auth.prisma` |
 | `pnpm run dev` / `dev:web` / `dev:server` / `dev:native` | 启动全部 / 单个应用 |
 | `pnpm run build` / `check-types` | 构建 / 全仓库类型检查 |
-| `pnpm run check` / `fix` | Ultracite 检查 / 自动修复 |
+| `pnpm run check` / `fix` | Ultracite 检查 / 自动修复（R11 后全仓 0 错误） |
+| `pnpm run test` | 运行 Vitest（`packages/api`、`packages/auth`，使用独立测试库，需要本地 PostgreSQL） |
 
 ## 注意事项
 
@@ -242,7 +249,7 @@ Most formatting and common issues are automatically fixed by Biome. Run `pnpm ex
 - [2026-11-10][R00] 测试进程本身拿不到 `DATABASE_URL`；`packages/api` 的 `test` 脚本用 `varlock run --path ../db/ -- vitest run` 从 `packages/db` 加载环境变量，新增需要数据库的测试包照此写。
 - [2026-11-10][R00] 测试一律走 `zyk_aws_admin_test` 测试库：`globalSetup` 建库并 `prisma migrate deploy`，`setupFiles` 把 `DATABASE_URL` 改指向测试库；`packages/db/src/testing.ts` 拒绝对非 `_test` 结尾的库操作，只能在测试中导入，业务代码不要用。
 - [2026-11-10][R00] 新增服务端环境变量要三处同步：`apps/server/.env.schema` 声明（敏感项标 sensitive）→ `pnpm run env:generate` 重新生成 `apps/server/src/env.ts` → `turbo.json` 的 `globalEnv` 加上变量名；`GITHUB_TOKEN` 只在服务端，web/native 不得出现。
-- [2026-11-10][R00] 检查迁移与 schema 是否一致用 `cd packages/db && varlock run -- npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code`（输出 No difference 即一致），再配合 `prisma migrate status`；全仓 lint 有基线遗留错误（由 R11 清理），各需求只对自己改动的文件跑 `pnpm exec ultracite check <文件...>`。
+- [2026-11-10][R00] 检查迁移与 schema 是否一致用 `cd packages/db && varlock run -- npx prisma migrate diff --from-config-datasource --to-schema prisma/schema --exit-code`（输出 No difference 即一致），再配合 `prisma migrate status`；全仓 lint 有基线遗留错误（由 R11 清理），各需求只对自己改动的文件跑 `pnpm exec ultracite check <文件...>`。（R11 已完成，现在全仓 `pnpm run check` 应为 0 错误，直接跑全仓即可。）
 - [2026-11-10][R01] web 开了 typedRoutes，`router.push("/xxx")` 指向的路由必须已有 `page.tsx`，否则 check-types 报错；跳转到还没实现的页面时先建占位 `page.tsx`。
 - [2026-11-10][R01] turbo 会并行跑各包的 `test`，多个包共用一个测试库会互相干扰；每个需要数据库的测试包在 `globalSetup` 里给 `getTestDatabaseUrl` 传自己的后缀（如 auth 用 `_auth_test`），各用独立测试库。
 - [2026-11-10][R01] 不存在的 Next.js 子路由直接渲染根 404，不经过其父目录的受保护 layout；验收未来页面的登录跳转前先建占位 page，R01 已为 new 和 [id] 建好占位页。
@@ -254,7 +261,7 @@ Most formatting and common issues are automatically fixed by Biome. Run `pnpm ex
 - [2026-11-11][R02] GitHub 用户搜索重复 type 限定符时实测采用第一个；固定 `type:user` 必须放在用户关键字之前，末尾追加会被输入 type:org 覆盖。已增加回归测试，并同步 PRD/技术设计中的 URL 示例。
 - [2026-11-11][R02] agent-browser 的 find/fill 会给元素添加 data-agent-browser-located；在 SSR 表单尚未水合时操作会引入工具造成的 hydration 警告。先用不改 DOM 的 wait --fn 等待查询结果/图片就绪，再操作；重开浏览器后 Next MCP 无错误。
 - [2026-11-11][R03] web 包暂无单元测试框架；纯展示组件用临时目录里的 tsx + `react-dom/server` `renderToStaticMarkup` 冒烟脚本核对输出（不入库），日期按 UTC 格式化避免时区导致结果漂移。
-- [2026-11-11][R03] 全仓 `pnpm run check` 目前有约 50 个历史错误（fumadocs、native、ui、login/sign-in 表单等未改动文件）；验收时对本批改动的目录单独跑 `pnpm exec ultracite check <路径>` 判断是否通过。
+- [2026-11-11][R03] 全仓 `pnpm run check` 目前有约 50 个历史错误（fumadocs、native、ui、login/sign-in 表单等未改动文件）；验收时对本批改动的目录单独跑 `pnpm exec ultracite check <路径>` 判断是否通过。（已过时：R11 已清零。）
 - [2026-11-11][R04] `@prisma/adapter-pg` 下 P2002 的 `meta.target` 为空，约束名只在 `meta.driverAdapterError.cause.constraint` 里；判断唯一约束冲突统一用 `@zyk-aws-admin/db` 的 `isUniqueConstraintError(error, field?)`，不要直接读 `meta.target`。
 - [2026-11-12][R11] 根 Biome 原本会检查工作流状态文件 `.workflow/state.json`（git 已排除但 Biome 不读 info/exclude）；已在根 `biome.json` 的 includes 加 `!.workflow`，以后新增本地工具目录同样在这里排除。
 - [2026-11-12][R11] R11 任务 3 后全仓 `pnpm run check` 已为 0 错误（前述「基线遗留错误」条目失效）；之后改动应保持全仓 check 干净，不用 `biome-ignore` 或在根 `biome.json` 排除目录/关规则规避。
