@@ -3,12 +3,27 @@ import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";
 import type { AppRouter } from "@zyk-aws-admin/api/routers/index";
 import { Platform } from "react-native";
-
+import { getTrpcCode } from "@/lib/app-error";
 import { authClient } from "@/lib/auth-client";
 
 import { ENV } from "../src/env";
 
-export const queryClient = new QueryClient();
+export const queryClient = new QueryClient({
+	defaultOptions: {
+		mutations: { networkMode: "always", retry: false },
+		queries: {
+			refetchOnWindowFocus: true,
+			retry: (failures, error) =>
+				failures < 1 &&
+				![
+					"UNAUTHORIZED",
+					"BAD_REQUEST",
+					"NOT_FOUND",
+					"TOO_MANY_REQUESTS",
+				].includes(getTrpcCode(error) ?? ""),
+		},
+	},
+});
 
 const trpcClient = createTRPCClient<AppRouter>({
 	links: [

@@ -2,7 +2,7 @@
 
 由 [Better-T-Stack](https://better-t-stack.dev) v3.49.0 生成的 TypeScript 全栈 monorepo（生成参数见 `bts.jsonc`）。
 
-**已实现的业务功能**：`docs/需求.md`（PRD v0.3）描述的「GitHub 用户管理后台」已在分支 `workflow/20261110` 上完成（R00～R11，规格见 `specs/`）：开放注册 + 登录限流、模糊搜索 GitHub 用户、查看资料、加入数据库、名单列表（搜索/标签筛选/排序/分页）、详情、修改备注和标签、从 GitHub 同步、删除和批量删除。移动端未接入，生产部署尚未确定。
+**已实现的业务功能**：`docs/需求.md`（PRD v0.3）描述的「GitHub 用户管理后台」已在分支 `workflow/20261110` 上完成（R00～R11，规格见 `specs/`）：开放注册 + 登录限流、模糊搜索 GitHub 用户、查看资料、加入数据库、名单列表（搜索/标签筛选/排序/分页）、详情、修改备注和标签、从 GitHub 同步、删除和批量删除。安卓端现已接入同一套认证和 GitHub 用户接口，运行与验收说明见 `docs/android.md`；生产部署尚未确定。
 
 ## 技术栈
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | Monorepo | pnpm workspace（`pnpm@12`，`node-linker=isolated`）+ Turborepo，依赖版本统一在 `pnpm-workspace.yaml` 的 `catalog:` 中 |
 | Web 前端 | Next.js 16（App Router、`typedRoutes`、React Compiler）+ React 19 + Tailwind v4 + shadcn/ui（`base-lyra` 风格，基于 Base UI） |
-| 移动端 | Expo 58 + React Native 0.88 + Expo Router（Drawer + Tabs）+ HeroUI Native + Uniwind（RN 版 Tailwind v4） |
+| 移动端 | Expo 58 + React Native 0.88 + Expo Router（Stack + Tabs）+ HeroUI Native + Uniwind（RN 版 Tailwind v4） |
 | 后端 | Hono 4，运行在 Node（`@hono/node-server`），开发用 `tsx watch`，构建用 `tsdown` |
 | API | tRPC 11 + TanStack Query 5（`@trpc/tanstack-react-query`），端到端类型安全 |
 | 认证 | Better Auth 1.7（邮箱密码登录 + `@better-auth/expo` 插件） |
@@ -32,10 +32,10 @@ zyk-aws-admin/
 │   │       ├── lib/        # auth-client（Better Auth React 客户端）、require-session（后台页面鉴权）、app-error（错误码转提示）
 │   │       └── utils/trpc.ts       # tRPC 客户端 + QueryClient（全局 onError 弹 toast）
 │   ├── native/             # Expo 移动端（scheme: zyk-aws-admin）
-│   │   ├── app/            # Expo Router：_layout → (drawer) → (tabs)，另有 modal、+not-found
-│   │   ├── components/     # sign-in、sign-up、container、theme-toggle
+│   │   ├── app/            # Expo Router：根 Stack.Protected 鉴权，login；(drawer)/(tabs) 下为名单、发现、个人中心；modal 为资料页
+│   │   ├── components/     # auth-form、sign-in、sign-up、theme-toggle；developers/ 下为名单、搜索、资料、编辑和状态组件
 │   │   ├── contexts/       # app-theme-context
-│   │   ├── lib/auth-client.ts  # Better Auth + expoClient，会话存 SecureStore
+│   │   ├── lib/            # auth-client（会话存 SecureStore）、业务错误提示、会话恢复、应用前台/网络状态
 │   │   ├── utils/trpc.ts       # tRPC 客户端（原生端手动带 Cookie 请求头）
 │   │   └── babel-plugins/      # Hermes 兼容用的自定义 Babel 插件
 │   ├── server/             # Hono API 服务，端口 3000

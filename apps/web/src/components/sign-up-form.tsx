@@ -66,10 +66,15 @@ export default function SignUpForm({
 	}
 
 	return (
-		<div className="mx-auto mt-10 w-full max-w-md p-6">
-			<h1 className="mb-6 text-center font-bold text-3xl">注册账号</h1>
+		<div className="mx-auto w-full max-w-sm">
+			<h1 className="font-semibold text-3xl tracking-tight">
+				创建你的工作空间
+			</h1>
+			<p className="mt-3 mb-8 text-muted-foreground text-sm">
+				注册账号，开始构建专属的 GitHub 用户名单。
+			</p>
 
-			<form className="space-y-4" onSubmit={handleSubmit}>
+			<form className="flex flex-col gap-5" onSubmit={handleSubmit}>
 				<div>
 					<form.Field name="name">
 						{(field) => (
@@ -131,11 +136,7 @@ export default function SignUpForm({
 			</form>
 
 			<div className="mt-4 text-center">
-				<Button
-					className="text-indigo-600 hover:text-indigo-800"
-					onClick={onSwitchToSignIn}
-					variant="link"
-				>
+				<Button onClick={onSwitchToSignIn} variant="link">
 					已有账号？去登录
 				</Button>
 			</div>

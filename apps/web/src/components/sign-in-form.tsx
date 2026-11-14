@@ -63,10 +63,13 @@ export default function SignInForm({
 	}
 
 	return (
-		<div className="mx-auto mt-10 w-full max-w-md p-6">
-			<h1 className="mb-6 text-center font-bold text-3xl">登录</h1>
+		<div className="mx-auto w-full max-w-sm">
+			<h1 className="font-semibold text-3xl tracking-tight">欢迎回来</h1>
+			<p className="mt-3 mb-8 text-muted-foreground text-sm">
+				登录 GitSpace，继续探索你的开发者网络。
+			</p>
 
-			<form className="space-y-4" onSubmit={handleSubmit}>
+			<form className="flex flex-col gap-5" onSubmit={handleSubmit}>
 				<div>
 					<form.Field name="email">
 						{(field) => (
@@ -113,12 +116,8 @@ export default function SignInForm({
 			</form>
 
 			<div className="mt-4 text-center">
-				<Button
-					className="text-indigo-600 hover:text-indigo-800"
-					onClick={onSwitchToSignUp}
-					variant="link"
-				>
-					没有账号？去注册1
+				<Button onClick={onSwitchToSignUp} variant="link">
+					没有账号？去注册
 				</Button>
 			</div>
 		</div>
