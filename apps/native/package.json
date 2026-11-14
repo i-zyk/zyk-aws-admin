@@ -11,6 +11,7 @@
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
     "start": "expo start",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "web": "expo start --web"
   },
   "dependencies": {

@@ -1,3 +1,28 @@
 @import "tailwindcss";
 @import "uniwind";
 @import "heroui-native/styles";
+
+@layer theme {
+	:root {
+		@variant light {
+			--background: hsl(145, 20%, 97%);
+			--foreground: hsl(155, 22%, 14%);
+			--accent: hsl(157, 63%, 27%);
+			--accent-foreground: hsl(0, 0%, 100%);
+			--muted: hsl(150, 5%, 43%);
+			--border: hsl(145, 12%, 89%);
+		}
+	}
+	:root {
+		@variant dark {
+			--background: hsl(155, 16%, 7%);
+			--foreground: hsl(145, 15%, 94%);
+			--surface: hsl(155, 12%, 12%);
+			--surface-secondary: hsl(155, 12%, 16%);
+			--accent: hsl(152, 44%, 65%);
+			--accent-foreground: hsl(155, 30%, 10%);
+			--muted: hsl(145, 6%, 65%);
+			--border: hsl(155, 10%, 23%);
+		}
+	}
+}

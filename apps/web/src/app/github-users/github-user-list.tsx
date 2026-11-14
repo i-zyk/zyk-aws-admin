@@ -11,7 +11,15 @@ import {
 } from "@zyk-aws-admin/api/github/schemas";
 import type { AppRouter } from "@zyk-aws-admin/api/routers/index";
 import { Alert, AlertDescription } from "@zyk-aws-admin/ui/components/alert";
+import { Badge } from "@zyk-aws-admin/ui/components/badge";
 import { Button, buttonVariants } from "@zyk-aws-admin/ui/components/button";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@zyk-aws-admin/ui/components/card";
 import { Checkbox } from "@zyk-aws-admin/ui/components/checkbox";
 import {
 	Empty,
@@ -31,6 +39,7 @@ import {
 import {
 	Select,
 	SelectContent,
+	SelectGroup,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
@@ -45,6 +54,7 @@ import {
 	TableRow,
 } from "@zyk-aws-admin/ui/components/table";
 import { cn } from "@zyk-aws-admin/ui/lib/utils";
+import { ArrowUpRight, FolderGit2, GitFork, Search, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -136,8 +146,11 @@ function KeywordForm({ q, onApply }: { q: string; onApply: ApplyFilters }) {
 		[onApply, value]
 	);
 	return (
-		<form className="flex items-end gap-2" onSubmit={handleSubmit}>
-			<Field className="w-64">
+		<form
+			className="flex w-full items-end gap-2 sm:w-auto"
+			onSubmit={handleSubmit}
+		>
+			<Field className="w-full sm:w-64">
 				<FieldLabel htmlFor="github-user-list-keyword">关键字</FieldLabel>
 				<Input
 					autoComplete="off"
@@ -151,7 +164,8 @@ function KeywordForm({ q, onApply }: { q: string; onApply: ApplyFilters }) {
 				/>
 			</Field>
 			<Button type="submit" variant="outline">
-				筛选
+				<Search data-icon="inline-start" />
+				搜索
 			</Button>
 		</form>
 	);
@@ -189,11 +203,13 @@ function TagSelect({ tag, onApply }: { tag: string; onApply: ApplyFilters }) {
 					<SelectValue />
 				</SelectTrigger>
 				<SelectContent>
-					{items.map((item) => (
-						<SelectItem key={item.value ?? ""} value={item.value}>
-							{item.label}
-						</SelectItem>
-					))}
+					<SelectGroup>
+						{items.map((item) => (
+							<SelectItem key={item.value ?? ""} value={item.value}>
+								{item.label}
+							</SelectItem>
+						))}
+					</SelectGroup>
 				</SelectContent>
 			</Select>
 		</Field>
@@ -234,11 +250,13 @@ function SortControls({
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
-						{SORT_ITEMS.map((item) => (
-							<SelectItem key={item.value} value={item.value}>
-								{item.label}
-							</SelectItem>
-						))}
+						<SelectGroup>
+							{SORT_ITEMS.map((item) => (
+								<SelectItem key={item.value} value={item.value}>
+									{item.label}
+								</SelectItem>
+							))}
+						</SelectGroup>
 					</SelectContent>
 				</Select>
 			</Field>
@@ -282,11 +300,13 @@ function PageSizeSelect({
 					<SelectValue />
 				</SelectTrigger>
 				<SelectContent>
-					{PAGE_SIZE_ITEMS.map((item) => (
-						<SelectItem key={item.value} value={item.value}>
-							{item.label}
-						</SelectItem>
-					))}
+					<SelectGroup>
+						{PAGE_SIZE_ITEMS.map((item) => (
+							<SelectItem key={item.value} value={item.value}>
+								{item.label}
+							</SelectItem>
+						))}
+					</SelectGroup>
 				</SelectContent>
 			</Select>
 		</Field>
@@ -296,9 +316,7 @@ function PageSizeSelect({
 // ---- 表格和分页 ----
 
 const COLUMN_LABELS = [
-	"头像",
-	"用户名",
-	"昵称",
+	"开发者",
 	"公司",
 	"所在地",
 	"粉丝数",
@@ -351,14 +369,23 @@ function UserRow({
 				/>
 			</TableCell>
 			<TableCell>
-				<GithubAvatar login={user.login} src={user.avatarUrl} />
+				<Link
+					className="flex items-center gap-3"
+					href={`/github-users/${user.id}`}
+				>
+					<GithubAvatar login={user.login} src={user.avatarUrl} />
+					<div className="flex min-w-32 flex-col gap-1">
+						<span className="font-medium">
+							{user.name?.trim() || user.login}
+						</span>
+						<span className="text-muted-foreground text-xs">@{user.login}</span>
+					</div>
+				</Link>
 			</TableCell>
-			<TableCell className="font-medium">{user.login}</TableCell>
 			<TableCell>
-				<TextCell value={user.name} />
-			</TableCell>
-			<TableCell>
-				<TextCell value={user.company} />
+				<div className="max-w-40 truncate" title={user.company ?? undefined}>
+					<TextCell value={user.company} />
+				</div>
 			</TableCell>
 			<TableCell>
 				<TextCell value={user.location} />
@@ -373,15 +400,22 @@ function UserRow({
 				<TagList className="min-w-32" tags={user.tags} />
 			</TableCell>
 			<TableCell className="tabular-nums">
-				<time dateTime={user.syncedAt}>{formatDateTime(user.syncedAt)}</time>
+				<time
+					className="block w-24 whitespace-normal text-muted-foreground text-xs leading-5"
+					dateTime={user.syncedAt}
+				>
+					{formatDateTime(user.syncedAt)}
+				</time>
 			</TableCell>
 			<TableCell>
 				<div className="flex items-center gap-3">
 					<Link
-						className="underline underline-offset-4"
+						className="flex items-center gap-1 text-primary hover:underline"
 						href={`/github-users/${user.id}`}
 					>
-						查看<span className="sr-only">：{user.login}</span>
+						查看
+						<ArrowUpRight aria-hidden="true" className="size-3" />
+						<span className="sr-only">：{user.login}</span>
 					</Link>
 					<EditGithubUserDialog record={user} />
 					<SyncGithubUserButton id={user.id} login={user.login} size="sm" />
@@ -411,8 +445,8 @@ function UserTable({
 	const allSelected = items.length > 0 && selectedCount === items.length;
 	const someSelected = selectedCount > 0 && !allSelected;
 	return (
-		<Table>
-			<TableHeader>
+		<Table className="[&_td]:px-4 [&_td]:py-5 [&_th]:px-4 [&_th]:py-3">
+			<TableHeader className="bg-muted/50">
 				<TableRow>
 					<TableHead className="w-10">
 						<Checkbox
@@ -524,7 +558,7 @@ function ListPagination({
 	const { page, pageSize } = params;
 	const totalPages = Math.max(1, Math.ceil(total / pageSize));
 	return (
-		<div className="flex flex-wrap items-center justify-between gap-4">
+		<div className="flex flex-wrap items-center justify-between gap-4 border-t px-5 py-4">
 			<p className="text-muted-foreground text-sm">
 				共 {NUMBER_FORMAT.format(total)} 条，第 {page} / {totalPages} 页
 			</p>
@@ -611,9 +645,12 @@ function ErrorState({
 
 function EmptyListState() {
 	return (
-		<Empty>
+		<Empty className="min-h-80">
 			<EmptyHeader>
-				<EmptyTitle>名单还是空的</EmptyTitle>
+				<span className="mx-auto mb-3 flex size-14 items-center justify-center rounded-2xl bg-accent text-primary">
+					<Users className="size-6" />
+				</span>
+				<EmptyTitle>你的开发者网络，从这里开始</EmptyTitle>
 				<EmptyDescription>
 					搜索 GitHub 用户并加入名单后会显示在这里
 				</EmptyDescription>
@@ -873,37 +910,102 @@ export function GithubUserList({ params }: { params: GithubUserListParams }) {
 	}, [markPageFix, selectionScope]);
 
 	return (
-		<div className="mt-6 flex flex-col gap-4">
-			<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-				<search
-					aria-label="筛选名单"
-					className="flex flex-wrap items-end gap-x-6 gap-y-3"
-				>
-					<KeywordForm key={q} onApply={applyFilters} q={q} />
-					<TagSelect onApply={applyFilters} tag={tag} />
-					<SortControls onApply={applyFilters} order={order} sort={sort} />
-					<PageSizeSelect onApply={applyFilters} pageSize={pageSize} />
-				</search>
-				<BulkDeleteGithubUsersDialog
-					ids={selectedIds}
-					onDeleted={handleBulkDeleted}
-				/>
+		<div className="flex flex-col gap-7">
+			<div className="grid gap-4 sm:grid-cols-3">
+				{[
+					{
+						description: "当前筛选条件下的名单人数",
+						icon: Users,
+						label: "匹配的用户",
+						value: query.data?.total,
+					},
+					{
+						description: "本页开发者的 GitHub 粉丝合计",
+						icon: GitFork,
+						label: "本页粉丝总数",
+						value: query.data?.items.reduce(
+							(sum, user) => sum + user.followers,
+							0
+						),
+					},
+					{
+						description: "本页开发者的公开仓库合计",
+						icon: FolderGit2,
+						label: "本页公开仓库",
+						value: query.data?.items.reduce(
+							(sum, user) => sum + user.publicRepos,
+							0
+						),
+					},
+				].map(({ label, value, description, icon: Icon }) => (
+					<Card className="rounded-xl py-5 shadow-xs" key={label}>
+						<CardHeader>
+							<CardTitle className="flex items-center justify-between">
+								{label}
+								<Icon className="size-4 text-muted-foreground" />
+							</CardTitle>
+							<CardDescription>{description}</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<p className="font-semibold text-3xl tabular-nums tracking-tight">
+								{query.isError || value === undefined
+									? "—"
+									: NUMBER_FORMAT.format(value)}
+							</p>
+						</CardContent>
+					</Card>
+				))}
 			</div>
-			<section
-				aria-busy={query.isFetching}
-				aria-label="GitHub 用户名单"
-				className="flex flex-col gap-4 transition-opacity data-[placeholder=true]:opacity-60"
-				data-placeholder={query.isPlaceholderData}
-			>
-				<ListBody
-					data={query.data}
-					error={query.error}
-					onDeleted={handleDeleted}
-					onRetry={handleRetry}
-					params={params}
-					selection={rowSelection}
-				/>
-			</section>
+			<div className="overflow-hidden rounded-xl border bg-card shadow-xs">
+				<div className="flex items-center justify-between gap-3 border-b px-5 py-5">
+					<div className="flex items-center gap-3">
+						<h2 className="font-semibold text-base">所有开发者</h2>
+						<Badge variant="secondary">
+							{query.isError || !query.data
+								? "—"
+								: NUMBER_FORMAT.format(query.data.total)}
+						</Badge>
+					</div>
+					<span className="text-muted-foreground text-xs">
+						{selectedIds.length
+							? `已选择 ${selectedIds.length} 位用户`
+							: "发现 · 连接 · 管理"}
+					</span>
+				</div>
+				<div className="flex flex-wrap items-end justify-between gap-4 border-b p-5">
+					<search
+						aria-label="筛选名单"
+						className="flex min-w-0 flex-wrap items-end gap-4"
+					>
+						<KeywordForm key={q} onApply={applyFilters} q={q} />
+						<TagSelect onApply={applyFilters} tag={tag} />
+						<SortControls onApply={applyFilters} order={order} sort={sort} />
+						<PageSizeSelect onApply={applyFilters} pageSize={pageSize} />
+					</search>
+					<BulkDeleteGithubUsersDialog
+						ids={selectedIds}
+						onDeleted={handleBulkDeleted}
+					/>
+				</div>
+				<section
+					aria-busy={query.isFetching}
+					aria-label="GitHub 用户名单"
+					className="flex min-w-0 flex-col transition-opacity data-[placeholder=true]:opacity-60"
+					data-placeholder={query.isPlaceholderData}
+				>
+					<ListBody
+						data={query.data}
+						error={query.error}
+						onDeleted={handleDeleted}
+						onRetry={handleRetry}
+						params={params}
+						selection={rowSelection}
+					/>
+				</section>
+			</div>
+			<p className="text-center text-muted-foreground text-xs">
+				你的名单保存在数据库中，点击同步可获取最新 GitHub 资料。
+			</p>
 		</div>
 	);
 }
