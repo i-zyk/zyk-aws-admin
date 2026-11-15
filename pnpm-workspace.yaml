@@ -7,6 +7,7 @@ allowBuilds:
   "@prisma/client": true
   "@prisma/engines": true
   prisma: true
+  workerd: true
 overrides:
   "@next/env": npm:@varlock/nextjs-integration@1.2.2
 catalog:

@@ -1,0 +1,24 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "zyk-aws-admin-web",
+	"main": ".open-next/worker.js",
+	"compatibility_date": "2026-10-20",
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	// 统一入口：页面和（后续的）后端转发都走这一个域名，DNS 记录和证书由 Cloudflare 自动创建
+	"routes": [{ "pattern": "admin.izyk.online", "custom_domain": true }],
+	// 关掉 *.workers.dev 和预览地址，只保留上面一个入口，避免登录 Cookie 对不上
+	"workers_dev": false,
+	"preview_urls": false,
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	// next/image 的头像优化走 Cloudflare Images
+	// 见 https://opennext.js.org/cloudflare/howtos/image
+	"images": {
+		"binding": "IMAGES"
+	},
+	"observability": {
+		"enabled": true
+	}
+}

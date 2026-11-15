@@ -1,0 +1,74 @@
+# 前端（apps/web）用 OpenNext 构建并发布到 Cloudflare Workers
+#
+# 仓库需要配置：
+#   Secrets   CLOUDFLARE_API_TOKEN   Cloudflare API Token，权限：
+#                                    Account › Workers Scripts › Edit
+#                                    Zone › Workers Routes › Edit（Zone Resources 要包含 izyk.online）
+#             CLOUDFLARE_ACCOUNT_ID  Cloudflare 账户 ID
+#   Variables NEXT_PUBLIC_SERVER_URL https://admin.izyk.online
+#                                    同域名方案：后端经同一个 Worker 转发，构建时写进前端代码
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/web/**"
+      - "packages/ui/**"
+      - "packages/api/**"
+      - "packages/auth/**"
+      - "packages/db/prisma/**"
+      - "packages/config/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "biome.json"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+# 同一时间只跑一次发布，后来的排队，不取消正在进行的发布
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+    env:
+      # web 编译时要做类型检查，类型依赖 Prisma 生成的客户端；生成不连数据库，只需要一个合法的地址
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      NEXT_PUBLIC_SERVER_URL: ${{ vars.NEXT_PUBLIC_SERVER_URL }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm run db:generate
+
+      - name: Lint
+        run: pnpm run check
+
+      - name: Build (OpenNext)
+        run: pnpm --filter web run cf:build
+
+      - name: Deploy to Cloudflare
+        run: pnpm --filter web run cf:deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
