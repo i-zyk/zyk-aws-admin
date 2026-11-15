@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "build": "next build",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:deploy": "opennextjs-cloudflare deploy",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "check-types": "tsc --noEmit",
     "dev": "next dev --port 3001",
     "env:generate": "varlock codegen",
@@ -31,6 +34,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "1.20.13",
     "@tailwindcss/postcss": "catalog:",
     "@tanstack/react-query-devtools": "^5.104.2",
     "@types/node": "catalog:",
@@ -38,6 +42,7 @@
     "@types/react-dom": "catalog:",
     "@zyk-aws-admin/config": "workspace:*",
     "tailwindcss": "catalog:",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "wrangler": "4.156.0"
   }
 }
