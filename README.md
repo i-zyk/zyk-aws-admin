@@ -46,6 +46,15 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
   - Lambda 入口是 `src/lambda.ts`，本地 Node 入口是 `src/index.ts`，两者共用 `src/app.ts`。
   - `pnpm -F server run build:lambda` 把所有依赖打进 `apps/server/dist-lambda/`（Handler：`index.handler`），部署时不需要 `node_modules`。打包前先 `pnpm run db:generate`。
   - Lambda 上没有 `.env` 和 varlock CLI，环境变量由 `src/lambda-env.ts` 用 zod 校验，规则和 `apps/server/.env.schema` 保持一致。另有 `DATABASE_POOL_MAX`（数据库连接池上限，Lambda 建议设 2）。
+- **基础设施**（`infra/base/template.yaml`，us-east-2，栈名 `zyk-aws-admin-base`）：VPC（两个可用区，公有 / 应用私有 / 数据库私有子网）、NAT、RDS PostgreSQL 18（`db.t4g.micro`，单可用区）、SSH 跳板机、应用密钥和 Lambda 代码包桶。在本地手动部署，跳板机只放行部署时传入的 IP：
+
+  ```bash
+  cd infra/base
+  sam validate --lint
+  sam deploy --parameter-overrides SshCidr=<你的公网 IP>/32
+  ```
+
+  `SshCidr` 要填真实公网 IP：开着代理（例如 Clash 的 TUN 模式）时 `curl https://checkip.amazonaws.com` 查到的可能是代理节点的 IP。IP 变了就用新 IP 再执行一次 `sam deploy`。跳板机有固定 IP（输出 `BastionPublicIp`），sshd 同时监听 22 和 443（有些网络封了出站 22）；目前从开着 Clash TUN 的本机还连不上，待排查。数据库开了删除保护，删栈时会留快照；删栈前要先清空代码包桶。账户是 AWS 免费计划：只能用免费套餐机型（跳板机用 `t4g.micro`），费用从免费额度里扣，额度用完或到期后需要升级到付费计划。免费计划只能建 express 配置的 Aurora（不在 VPC 里），所以数据库先用 RDS，升级后可换回 Aurora Serverless v2。
 - 页面和接口使用同一个域名，所以登录 Cookie 是 `SameSite=Lax`。
 
 ## Getting Started

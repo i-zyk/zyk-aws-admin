@@ -1,0 +1,16 @@
+# 基础栈部署配置。SshCidr 不写在这里，每次部署时传入：
+#   cd infra/base
+#   sam deploy --parameter-overrides SshCidr=$(curl -s https://checkip.amazonaws.com)/32
+# 其他参数用模板里的默认值。
+version = 0.1
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+stack_name = "zyk-aws-admin-base"
+region = "us-east-2"
+profile = "zyk-iam"
+confirm_changeset = true
+fail_on_empty_changeset = false
+tags = "Project=\"zyk-aws-admin\" Stack=\"base\""
