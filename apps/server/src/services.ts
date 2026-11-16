@@ -1,10 +1,8 @@
-import { createGithubClient } from "@zyk-aws-admin/api/github/client";
-import { createAuth } from "@zyk-aws-admin/auth";
-import { createPrismaClient } from "@zyk-aws-admin/db";
-
+import { createServices } from "./create-services";
 import { ENV } from "./env.server";
 
-export const db = createPrismaClient(ENV);
-export const auth = createAuth(ENV, db);
-/** GitHub 客户端单例：token 只在服务端使用，不进入任何响应 */
-export const github = createGithubClient({ token: ENV.GITHUB_TOKEN });
+/**
+ * 本地 Node 服务用的单例，配置来自 varlock 校验过的 .env。
+ * 也是 `pnpm auth:generate` 读取的配置入口（它要求导出 auth）。
+ */
+export const { auth, db, github } = createServices(ENV);

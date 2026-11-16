@@ -60,3 +60,14 @@ model Verification {
   @@index([identifier])
   @@map("verification")
 }
+
+/// Better Auth 的限流计数（rateLimit.storage = "database"）：多个 Lambda 实例共享同一份计数
+model RateLimit {
+  id          String @id
+  key         String
+  count       Int
+  lastRequest BigInt
+
+  @@unique([key])
+  @@map("rateLimit")
+}

@@ -28,7 +28,7 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **名单列表**（`/github-users`）：按用户名、姓名、公司、备注搜索，按标签筛选、排序、分页；可多选后批量删除（每次最多 100 条）。
 - **详情**（`/github-users/[id]`）：查看保存的资料，修改备注和标签，从 GitHub 重新同步最新资料，删除记录（物理删除）。
 - **接口**：全部在 tRPC 的 `githubUser.*` 下（`packages/api/src/routers/github-user.ts`），都需要登录；GitHub API 只在服务端调用。
-- 移动端 `apps/native` 本期不接入；生产部署方案另行讨论。
+- 移动端 `apps/native` 本期不接入；生产部署见下文「部署」。
 
 ## 开放注册的风险
 
@@ -36,7 +36,17 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 
 - 任何人都可以用邮箱和密码注册，注册后即为管理员，所有用户权限相同，没有多角色区分。
 - 注册（`/sign-up/email`）和登录（`/sign-in/email`）接口按 IP 限流：各自 60 秒内最多 5 次，第 6 次返回 `429`；开发环境同样生效。
-- 限流计数存在服务进程内存中，重启即清空、多实例之间不共享；生产环境的限流存储和代理后的真实 IP 配置留到部署时再定。
+- 限流计数存在数据库的 `rateLimit` 表里，服务重启不清空，多个 Lambda 实例共享。
+- 客户端 IP 优先取 `x-client-ip` 请求头（生产环境由 Cloudflare Worker 用 `CF-Connecting-IP` 写入并覆盖客户端自带的值），没有时取 `x-forwarded-for`。本地开发直连后端时客户端可以自己伪造这两个请求头，限流只在生产链路上可靠。
+
+## 部署
+
+- **前端**：`apps/web` 用 OpenNext 打包成 Cloudflare Worker，推送到 main 时由 `.github/workflows/deploy-web.yml` 发布到 `admin.izyk.online`。
+- **后端**：`apps/server` 部署到 AWS Lambda（API Gateway HTTP API，IAM 鉴权），用 AWS SAM 管理，进行中。
+  - Lambda 入口是 `src/lambda.ts`，本地 Node 入口是 `src/index.ts`，两者共用 `src/app.ts`。
+  - `pnpm -F server run build:lambda` 把所有依赖打进 `apps/server/dist-lambda/`（Handler：`index.handler`），部署时不需要 `node_modules`。打包前先 `pnpm run db:generate`。
+  - Lambda 上没有 `.env` 和 varlock CLI，环境变量由 `src/lambda-env.ts` 用 zod 校验，规则和 `apps/server/.env.schema` 保持一致。另有 `DATABASE_POOL_MAX`（数据库连接池上限，Lambda 建议设 2）。
+- 页面和接口使用同一个域名，所以登录 Cookie 是 `SameSite=Lax`。
 
 ## Getting Started
 

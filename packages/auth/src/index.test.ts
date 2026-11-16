@@ -7,6 +7,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
 	AUTH_RATE_LIMIT_MAX_REQUESTS,
 	type AuthConfig,
+	CLIENT_IP_HEADER,
 	createAuth,
 } from "./index";
 
@@ -25,8 +26,8 @@ const db = createTestDatabase();
 const auth = createAuth(TEST_CONFIG, db);
 
 /**
- * Better Auth 的内存限流存储是模块级的，同一进程内的所有 auth 实例共享计数，
- * 所以每个用例都用自己的 IP（通过 x-forwarded-for 传入）来隔离计数。
+ * 限流计数存在数据库（rateLimit 表），每个用例前会清空；
+ * 每个用例仍用自己的 IP（通过 x-forwarded-for 传入），用例之间互不依赖清空的时机。
  */
 let ipCounter = 0;
 function nextIp(): string {
@@ -42,19 +43,24 @@ function nextEmail(): string {
 
 interface RequestOptions {
 	body?: Record<string, unknown>;
+	/** Worker 写入的真实客户端 IP（CLIENT_IP_HEADER），不传时只带 x-forwarded-for */
+	clientIp?: string;
 	cookie?: string;
 	ip: string;
 }
 
 function postAuth(
 	path: string,
-	{ body = {}, cookie, ip }: RequestOptions
+	{ body = {}, clientIp, cookie, ip }: RequestOptions
 ): Promise<Response> {
 	const headers = new Headers({
 		"content-type": "application/json",
 		origin: TEST_CONFIG.CORS_ORIGIN,
 		"x-forwarded-for": ip,
 	});
+	if (clientIp) {
+		headers.set(CLIENT_IP_HEADER, clientIp);
+	}
 	if (cookie) {
 		headers.set("cookie", cookie);
 	}
@@ -195,6 +201,48 @@ describe("限流", () => {
 
 		const otherIpResponse = await signUp(nextIp());
 		expect(otherIpResponse.status).toBe(HTTP_OK);
+	});
+
+	it("带 x-client-ip 时按它计数，x-forwarded-for 变化不影响", async () => {
+		// 生产环境经 Worker 和 API Gateway 转发：x-forwarded-for 是 Cloudflare 出口 IP（每次可能不同），
+		// x-client-ip 才是用户的真实 IP
+		const clientIp = nextIp();
+		const signUpVia = (proxyIp: string) =>
+			postAuth("/sign-up/email", {
+				body: { email: nextEmail(), name: "测试用户", password: TEST_PASSWORD },
+				clientIp,
+				ip: proxyIp,
+			});
+
+		const statuses = await sendSequentially(
+			() => signUpVia(nextIp()),
+			AUTH_RATE_LIMIT_MAX_REQUESTS
+		);
+		expect(statuses).not.toContain(HTTP_TOO_MANY_REQUESTS);
+
+		const limited = await signUpVia(nextIp());
+		expect(limited.status).toBe(HTTP_TOO_MANY_REQUESTS);
+	});
+
+	it("不同的 x-client-ip 分开计数，即使 x-forwarded-for 相同", async () => {
+		const sharedProxyIp = nextIp();
+		const limitedClientIp = nextIp();
+		const signUpAs = (clientIp: string) =>
+			postAuth("/sign-up/email", {
+				body: { email: nextEmail(), name: "测试用户", password: TEST_PASSWORD },
+				clientIp,
+				ip: sharedProxyIp,
+			});
+
+		await sendSequentially(
+			() => signUpAs(limitedClientIp),
+			AUTH_RATE_LIMIT_MAX_REQUESTS
+		);
+		expect((await signUpAs(limitedClientIp)).status).toBe(
+			HTTP_TOO_MANY_REQUESTS
+		);
+
+		expect((await signUpAs(nextIp())).status).toBe(HTTP_OK);
 	});
 });
 
