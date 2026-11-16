@@ -6,9 +6,21 @@ import type { DatabaseConfig } from "./config";
 /** github_user 表的记录类型，供 api 的 mapper 使用 */
 export type { GithubUser } from "../prisma/generated/client";
 
-export function createPrismaClient(env: DatabaseConfig) {
+export interface PrismaClientOptions {
+	/**
+	 * 连接池最多保持的连接数，不传时用 pg 的默认值（10）。
+	 * Lambda 每个实例各有一个连接池，并发高时连接数是「实例数 × 上限」，要设小。
+	 */
+	maxConnections?: number;
+}
+
+export function createPrismaClient(
+	env: DatabaseConfig,
+	{ maxConnections }: PrismaClientOptions = {}
+) {
 	const adapter = new PrismaPg({
 		connectionString: env.DATABASE_URL,
+		max: maxConnections,
 	});
 	return new PrismaClient({ adapter });
 }
