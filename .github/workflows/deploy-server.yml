@@ -1,0 +1,147 @@
+# 后端（apps/server）用 AWS SAM 部署到应用栈 zyk-aws-admin-api（infra/api）
+#
+# 账户的 SCP 禁止创建 OIDC 身份提供商，所以用 CI 栈（infra/ci）里部署用户的长期访问密钥。
+# 部署用户只能通过 CloudFormation 服务角色更新应用栈，服务角色建出来的 IAM 身份都受权限边界限制，见 infra/ci/template.yaml。
+#
+# 仓库需要配置（production 环境，只允许 main 分支使用）：
+#   Secrets   AWS_ACCESS_KEY_ID      CI 栈输出 DeployUserName 对应用户的访问密钥
+#             AWS_SECRET_ACCESS_KEY
+#   Variables AWS_CFN_ROLE_ARN       CI 栈输出 CloudFormationRoleArn
+#
+# 数据库迁移在部署过程中由 CloudFormation 自定义资源执行（先迁移，成功后才更新 API 函数），
+# 迁移目录有变化才会触发，见 infra/api/template.yaml 的 Migrations。
+name: Deploy server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/server/**"
+      - "packages/api/**"
+      - "packages/auth/**"
+      - "packages/db/**"
+      - "packages/config/**"
+      - "infra/api/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "biome.json"
+      - ".github/workflows/deploy-server.yml"
+  workflow_dispatch:
+
+# 同一时间只跑一次发布，后来的排队，不取消正在进行的发布
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      # 测试会在这个实例上创建各自的 *_test 库
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: zyk_aws_admin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/zyk_aws_admin
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      # 和 Lambda 运行时（nodejs24.x）一致
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm run db:generate
+
+      - name: Lint
+        run: pnpm run check
+
+      - name: Type check (server and its packages)
+        run: pnpm exec turbo run check-types --filter=server...
+
+      - name: Test
+        run: pnpm run test
+
+  deploy:
+    name: Build and deploy
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm run db:generate
+
+      - name: Build Lambda bundles
+        run: |
+          pnpm -F server run build:lambda
+          pnpm -F server run build:migrate
+
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Deploy
+        working-directory: infra/api
+        env:
+          CFN_ROLE_ARN: ${{ vars.AWS_CFN_ROLE_ARN }}
+        run: |
+          # 迁移目录的 git 树哈希：迁移文件有变化才会变，变了才触发迁移
+          migrations_hash=$(git rev-parse HEAD:packages/db/prisma/migrations)
+          sam deploy --config-env ci \
+            --role-arn "$CFN_ROLE_ARN" \
+            --parameter-overrides "MigrationsHash=$migrations_hash" \
+            --no-progressbar
+
+      # 走完整条链路：Cloudflare Worker → API Gateway（签名）→ Lambda
+      - name: Smoke test
+        run: |
+          for attempt in 1 2 3 4 5; do
+            body=$(curl -fsS --max-time 30 "https://admin.izyk.online/trpc/healthCheck?batch=1&input=%7B%220%22%3A%7B%7D%7D") \
+              && echo "$body" && echo "$body" | grep -q '"data":"OK"' && exit 0
+            echo "第 $attempt 次检查失败，10 秒后重试"
+            sleep 10
+          done
+          exit 1

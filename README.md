@@ -61,19 +61,26 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
   3. 把 `DATABASE_URL`（`zyk_app`，带 `sslmode=verify-full`）和 `GITHUB_TOKEN` 写进应用密钥 `zyk-aws-admin-base/app`，保留 `BETTER_AUTH_SECRET`：先读出当前值，用 `jq` 只改这两个字段，再 `put-secret-value`。不要改模板里这个密钥的 `GenerateSecretString`，改了会重新生成整个密钥，把这两个字段清空。
 
   CloudShell 闲置一段时间会重置，文件和变量都会丢，要一口气做完。`read -s` 输入密码或 token 的那一行要单独粘贴，否则它会把下一行命令当成输入读走。CloudShell 的 psql 16 对 PostgreSQL 18 执行 `\l` 会报错，可以改查 `pg_database`。
-- **应用栈**（`infra/api/template.yaml`，栈名 `zyk-aws-admin-api`）：后端 Lambda（Node 24、arm64、1024 MB、并发上限 10）放在应用私有子网，前面是 HTTP API，只接受 SigV4 签名的请求（`AWS_IAM` 鉴权，没签名返回 403），限速每秒 20 个、突发 50。基础栈部署并初始化数据库后，在本地部署：
+- **应用栈**（`infra/api/template.yaml`，栈名 `zyk-aws-admin-api`）：后端 Lambda（Node 24、arm64、1024 MB、并发上限 10）放在应用私有子网，前面是 HTTP API，只接受 SigV4 签名的请求（`AWS_IAM` 鉴权，没签名返回 403），限速每秒 20 个、突发 50。推送到 main 时由 `.github/workflows/deploy-server.yml` 部署（见下文「后端 CI」）；第一次部署或排查问题时在本地部署（先部署 CI 栈，应用栈要引用它的权限边界）：
 
   ```bash
-  pnpm run db:generate && pnpm -F server run build:lambda
+  pnpm run db:generate && pnpm -F server run build:lambda && pnpm -F server run build:migrate
   cd infra/api
   sam validate --lint
-  sam deploy
+  sam deploy --parameter-overrides MigrationsHash=$(git rev-parse HEAD:packages/db/prisma/migrations)
   ```
 
   - 密钥（`BETTER_AUTH_SECRET`、`DATABASE_URL`、`GITHUB_TOKEN`）在部署时从应用密钥 `zyk-aws-admin-base/app` 读取，写进 Lambda 的环境变量：有权限查看 Lambda 配置的人能在控制台看到明文。
   - 修改应用密钥后要重新部署并把 `SecretRevision` 加 1（`sam deploy --parameter-overrides SecretRevision=2`），否则 CloudFormation 不会重新读取，函数还在用旧值。
   - 输出 `ApiEndpoint` 是接口地址（写在 `apps/web/wrangler.jsonc` 的 `BACKEND_URL`），`WorkerUserName` 是 Worker 签名用的 IAM 用户（只能调用这个接口）。本地测试可以用 curl 自带的签名：`curl --aws-sigv4 "aws:amz:us-east-2:execute-api" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" <ApiEndpoint>/`，返回 `OK`。
-- 两个模板里会上传到 AWS 的文字（栈说明、参数说明、输出说明、资源 `Metadata`）用英文，中文在 CloudFormation 里会变成 `???`；中文说明写在 `#` 注释里。
+  - **数据库迁移**：部署时 CloudFormation 先调用迁移函数（自定义资源 `Migrations`），迁移成功才更新 API 函数；迁移失败整个部署回滚，线上继续跑旧代码。`MigrationsHash`（迁移目录的 git 树哈希）变了才会触发迁移。迁移函数（`apps/server/src/migrate-lambda.ts`）在 VPC 里，用 `packages/db/src/migrate.ts` 执行，和 `prisma migrate deploy` 兼容：同一张 `_prisma_migrations` 表、同样的校验和，`migrate.test.ts` 对照真正的 Prisma 验证，升级 Prisma 后要能通过。已上线的迁移文件不能再改（校验和不一致会报错停下）；某个迁移失败后要先修复数据库并用 `prisma migrate resolve` 标记，才能继续部署。手动补跑：`aws lambda invoke --function-name <输出 MigrateFunctionName> out.json`。
+- **后端 CI**（`infra/ci/template.yaml`，栈名 `zyk-aws-admin-ci`，本地手动部署）：账户的 SCP 禁止创建 OIDC 身份提供商，GitHub Actions 只能用长期访问密钥，所以权限分三层：
+  - 部署用户 `DeployUser`：密钥存在 GitHub `production` 环境（只允许 main 分支）的 secrets `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`。它只能对应用栈生成和执行变更集、往代码包桶上传，以及把服务角色交给 CloudFormation。
+  - CloudFormation 服务角色 `CloudFormationRole`（`production` 环境变量 `AWS_CFN_ROLE_ARN`）：真正创建应用栈资源，限定在应用栈的资源类型和名称前缀；CI 部署过一次后，应用栈会记住这个角色，之后本地部署也用它。
+  - 权限边界 `AppBoundary`：服务角色只能创建或修改挂了它的 IAM 角色和用户，应用栈里的角色和用户都挂着它。部署密钥泄露时，攻击者能做的事超不出这个边界（写日志、Lambda 在 VPC 里建网卡、调用 API）。
+  - 工作流：Biome、类型检查、测试（PostgreSQL 18 容器）→ 打包两个函数 → `sam deploy --config-env ci --role-arn ...` → 经 `admin.izyk.online` 冒烟测试。基础栈和 CI 栈不进 CI。
+  - 换部署密钥：`aws iam create-access-key --user-name <输出 DeployUserName>`，用管道把两个值分别写进 `gh secret set AWS_ACCESS_KEY_ID --env production` 和 `gh secret set AWS_SECRET_ACCESS_KEY --env production`（做法和下文 Worker 密钥一样），再删掉旧密钥。
+- 模板里会上传到 AWS 的文字（栈说明、参数说明、输出说明、资源 `Metadata`）用英文，中文在 CloudFormation 里会变成 `???`；中文说明写在 `#` 注释里。
 - **Worker 转发**：`apps/web/worker.ts` 是 Worker 的自定义入口，`/api/auth/*` 和 `/trpc/*` 由 `src/lib/backend-proxy.ts` 签名（SigV4）后转发给 `BACKEND_URL`，其他路径交给 OpenNext 生成的 Next.js。服务端渲染检查登录（`src/lib/require-session.ts`）也直接签名调用后端，不请求自己的域名；本地 `next dev` 不经过这些，仍直连 `NEXT_PUBLIC_SERVER_URL`。
   - 只转发 `accept`、`content-type`、`cookie`、`origin`、`user-agent` 五个请求头，`x-client-ip` 总是用 Cloudflare 的 `CF-Connecting-IP` 覆盖（后端登录限流按它计数）。
   - 签名用的访问密钥是 Worker secrets `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`，部署时不会被覆盖。生成或更换（先在 `apps/web` 下 `npx wrangler login`；`<用户名>` 是应用栈输出 `WorkerUserName`）：
