@@ -1,0 +1,145 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+# 应用栈：后端 Lambda（VPC 内，arm64）+ HTTP API（IAM 鉴权）。
+# 网络、数据库、应用密钥都在基础栈，这里通过导出值和密钥名引用。
+# 会上传到 AWS 的说明文字（Description、参数说明、输出说明、Metadata）用英文：中文在 CloudFormation 里会变成 ???。
+Description: >-
+  zyk-aws-admin app stack: API Lambda (in VPC, arm64) behind an IAM-authorized HTTP API.
+  Network, database and app secret come from the base stack.
+
+# 请求链路：Cloudflare Worker（SigV4 签名）→ HTTP API（AWS_IAM 鉴权，没签名直接 403）→ Lambda
+#   → 数据库（VPC 内，TLS）/ GitHub API（经 NAT 出网）
+#
+# 密钥用 CloudFormation 动态引用在部署时注入环境变量（方案 A）：
+#   - 有权限查看 Lambda 配置的人能在控制台看到明文；
+#   - 改了 Secrets Manager 里的值后，要把 SecretRevision 参数加 1 再部署，否则 CloudFormation
+#     不会重新读取密钥，函数还在用旧值。
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+
+Parameters:
+  BaseStackName:
+    Type: String
+    Default: zyk-aws-admin-base
+    # 子网、安全组从它的导出值引用，应用密钥名是 <基础栈名>/app
+    Description: Base stack name (exports and the <name>/app secret)
+  SiteUrl:
+    Type: String
+    Default: https://admin.izyk.online
+    AllowedPattern: ^https://[a-z0-9.-]+$
+    # 页面和接口同域名，用作 BETTER_AUTH_URL 和 CORS_ORIGIN
+    Description: Site URL, used as BETTER_AUTH_URL and CORS_ORIGIN
+  SecretRevision:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    # 应用密钥修改后加 1 再部署，让 CloudFormation 重新读取密钥值
+    Description: Bump after changing the app secret so CloudFormation re-resolves it
+
+Resources:
+  # 日志组单独建：可以设置保留天数（Lambda 自动建的日志组永久保留）
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}"
+      RetentionInDays: 14
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Hono API (apps/server/src/lambda.ts), bundle built by pnpm -F server run build:lambda
+        must:
+          - Run in the app private subnets with the base LambdaSecurityGroup; the DB only allows that group
+          - Reserved concurrency x DATABASE_POOL_MAX must stay below the DB connection limit (~80 on db.t4g.micro)
+    Properties:
+      CodeUri: ../../apps/server/dist-lambda
+      Handler: index.handler
+      Runtime: nodejs24.x
+      Architectures: [arm64]
+      MemorySize: 1024
+      # 小于 HTTP API 的 30 秒集成超时，超时时返回的是 Lambda 的错误而不是网关的 503
+      Timeout: 20
+      # 最多 10 个实例 × 每个 2 个连接 = 20 个数据库连接；同时限制异常流量下的费用
+      ReservedConcurrentExecutions: 10
+      VpcConfig:
+        SubnetIds: !Split
+          - ","
+          - Fn::ImportValue: !Sub "${BaseStackName}-AppSubnetIds"
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub "${BaseStackName}-LambdaSecurityGroupId"
+      LoggingConfig:
+        LogGroup: !Ref FunctionLogGroup
+        LogFormat: Text
+      Environment:
+        Variables:
+          NODE_ENV: production
+          NODE_OPTIONS: --enable-source-maps
+          # Lambda 的 Node 20+ 运行时默认不加载 RDS 证书，要显式指定，DATABASE_URL 的 sslmode=verify-full 才能校验通过
+          NODE_EXTRA_CA_CERTS: /var/runtime/ca-cert.pem
+          DATABASE_POOL_MAX: "2"
+          BETTER_AUTH_URL: !Ref SiteUrl
+          CORS_ORIGIN: !Ref SiteUrl
+          # 应用不读这个变量，只用来让 SecretRevision 变化时函数配置跟着变，触发重新读取密钥
+          APP_SECRET_REVISION: !Ref SecretRevision
+          BETTER_AUTH_SECRET: !Sub "{{resolve:secretsmanager:${BaseStackName}/app:SecretString:BETTER_AUTH_SECRET}}"
+          DATABASE_URL: !Sub "{{resolve:secretsmanager:${BaseStackName}/app:SecretString:DATABASE_URL}}"
+          GITHUB_TOKEN: !Sub "{{resolve:secretsmanager:${BaseStackName}/app:SecretString:GITHUB_TOKEN}}"
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /{proxy+}
+            Method: ANY
+
+  ApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/apigateway/${AWS::StackName}"
+      RetentionInDays: 14
+
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Only entry point to the backend, called by the Cloudflare Worker
+        must:
+          - Default authorizer must stay AWS_IAM so unsigned requests are rejected at the gateway
+    Properties:
+      Auth:
+        EnableIamAuthorizer: true
+        DefaultAuthorizer: AWS_IAM
+      # 全部路由合计每秒 20 个请求、突发 50，超出返回 429
+      DefaultRouteSettings:
+        ThrottlingRateLimit: 20
+        ThrottlingBurstLimit: 50
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiAccessLogGroup.Arn
+        Format: >-
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp",
+          "caller":"$context.identity.userArn","route":"$context.routeKey",
+          "status":"$context.status","latencyMs":"$context.responseLatency",
+          "integrationError":"$context.integrationErrorMessage",
+          "authError":"$context.authorizer.error"}
+
+Outputs:
+  ApiEndpoint:
+    Description: API endpoint (SigV4-signed requests only), configured in the Worker
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.${AWS::URLSuffix}"
+
+  ApiExecuteArn:
+    Description: Resource ARN for execute-api:Invoke, granted to the Worker IAM user
+    Value: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+  FunctionName:
+    Description: API Lambda function name
+    Value: !Ref ApiFunction
