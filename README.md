@@ -55,6 +55,12 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
   ```
 
   `SshCidr` 要填真实公网 IP：开着代理（例如 Clash 的 TUN 模式）时 `curl https://checkip.amazonaws.com` 查到的可能是代理节点的 IP。IP 变了就用新 IP 再执行一次 `sam deploy`。跳板机有固定 IP（输出 `BastionPublicIp`），sshd 同时监听 22 和 443（有些网络封了出站 22）；目前从开着 Clash TUN 的本机还连不上，待排查。数据库开了删除保护，删栈时会留快照；删栈前要先清空代码包桶。账户是 AWS 免费计划：只能用免费套餐机型（跳板机用 `t4g.micro`），费用从免费额度里扣，额度用完或到期后需要升级到付费计划。免费计划只能建 express 配置的 Aurora（不在 VPC 里），所以数据库先用 RDS，升级后可换回 Aurora Serverless v2。
+- **数据库初始化**（基础栈部署后做一次）：数据库在私有子网里，在 AWS CloudShell 的 VPC 环境里操作（VPC 选基础栈的 VPC，子网选一个应用私有子网，安全组选 `LambdaSecurityGroup`）。数据库强制 TLS，证书用 `https://truststore.pki.rds.amazonaws.com/us-east-2/us-east-2-bundle.pem`。
+  1. 用主账号 `zyk_admin`（密码在输出 `DbMasterSecretArn` 指向的密钥里）建应用账号 `zyk_app`，再把数据库所有者改成它：`CREATE ROLE zyk_app LOGIN PASSWORD ...; GRANT zyk_app TO zyk_admin; ALTER DATABASE zyk_aws_admin OWNER TO zyk_app;`。RDS 的主账号不是超级用户，要先把自己加进 `zyk_app` 才能改所有者。应用和迁移都用 `zyk_app`，主账号只做维护。
+  2. 用 `zyk_app` 执行 `prisma migrate deploy`，连接串带 `sslmode=require&sslcert=<证书文件的绝对路径>`。CloudShell 里不用装整个仓库：单独 `npm install prisma@<pnpm-lock.yaml 里的版本>`，拷入 `packages/db/prisma`，再写一个只从 `MIGRATE_DATABASE_URL` 读连接串的 `prisma.config.ts`。
+  3. 把 `DATABASE_URL`（`zyk_app`，带 `sslmode=verify-full`）和 `GITHUB_TOKEN` 写进应用密钥 `zyk-aws-admin-base/app`，保留 `BETTER_AUTH_SECRET`：先读出当前值，用 `jq` 只改这两个字段，再 `put-secret-value`。不要改模板里这个密钥的 `GenerateSecretString`，改了会重新生成整个密钥，把这两个字段清空。
+
+  CloudShell 闲置一段时间会重置，文件和变量都会丢，要一口气做完。`read -s` 输入密码或 token 的那一行要单独粘贴，否则它会把下一行命令当成输入读走。CloudShell 的 psql 16 对 PostgreSQL 18 执行 `\l` 会报错，可以改查 `pg_database`。
 - 页面和接口使用同一个域名，所以登录 Cookie 是 `SameSite=Lax`。
 
 ## Getting Started
