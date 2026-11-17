@@ -42,7 +42,7 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 ## 部署
 
 - **前端**：`apps/web` 用 OpenNext 打包成 Cloudflare Worker，推送到 main 时由 `.github/workflows/deploy-web.yml` 发布到 `admin.izyk.online`。
-- **后端**：`apps/server` 部署到 AWS Lambda（API Gateway HTTP API，IAM 鉴权），用 AWS SAM 管理，进行中。
+- **后端**：`apps/server` 部署到 AWS Lambda（API Gateway HTTP API，IAM 鉴权），用 AWS SAM 管理；Cloudflare Worker 转发还没接上。
   - Lambda 入口是 `src/lambda.ts`，本地 Node 入口是 `src/index.ts`，两者共用 `src/app.ts`。
   - `pnpm -F server run build:lambda` 把所有依赖打进 `apps/server/dist-lambda/`（Handler：`index.handler`），部署时不需要 `node_modules`。打包前先 `pnpm run db:generate`。
   - Lambda 上没有 `.env` 和 varlock CLI，环境变量由 `src/lambda-env.ts` 用 zod 校验，规则和 `apps/server/.env.schema` 保持一致。另有 `DATABASE_POOL_MAX`（数据库连接池上限，Lambda 建议设 2）。
@@ -61,6 +61,19 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
   3. 把 `DATABASE_URL`（`zyk_app`，带 `sslmode=verify-full`）和 `GITHUB_TOKEN` 写进应用密钥 `zyk-aws-admin-base/app`，保留 `BETTER_AUTH_SECRET`：先读出当前值，用 `jq` 只改这两个字段，再 `put-secret-value`。不要改模板里这个密钥的 `GenerateSecretString`，改了会重新生成整个密钥，把这两个字段清空。
 
   CloudShell 闲置一段时间会重置，文件和变量都会丢，要一口气做完。`read -s` 输入密码或 token 的那一行要单独粘贴，否则它会把下一行命令当成输入读走。CloudShell 的 psql 16 对 PostgreSQL 18 执行 `\l` 会报错，可以改查 `pg_database`。
+- **应用栈**（`infra/api/template.yaml`，栈名 `zyk-aws-admin-api`）：后端 Lambda（Node 24、arm64、1024 MB、并发上限 10）放在应用私有子网，前面是 HTTP API，只接受 SigV4 签名的请求（`AWS_IAM` 鉴权，没签名返回 403），限速每秒 20 个、突发 50。基础栈部署并初始化数据库后，在本地部署：
+
+  ```bash
+  pnpm run db:generate && pnpm -F server run build:lambda
+  cd infra/api
+  sam validate --lint
+  sam deploy
+  ```
+
+  - 密钥（`BETTER_AUTH_SECRET`、`DATABASE_URL`、`GITHUB_TOKEN`）在部署时从应用密钥 `zyk-aws-admin-base/app` 读取，写进 Lambda 的环境变量：有权限查看 Lambda 配置的人能在控制台看到明文。
+  - 修改应用密钥后要重新部署并把 `SecretRevision` 加 1（`sam deploy --parameter-overrides SecretRevision=2`），否则 CloudFormation 不会重新读取，函数还在用旧值。
+  - 输出 `ApiEndpoint` 是接口地址，`ApiExecuteArn` 是给 Worker 授权调用时用的资源 ARN。本地测试可以用 curl 自带的签名：`curl --aws-sigv4 "aws:amz:us-east-2:execute-api" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" <ApiEndpoint>/`，返回 `OK`。
+- 两个模板里会上传到 AWS 的文字（栈说明、参数说明、输出说明、资源 `Metadata`）用英文，中文在 CloudFormation 里会变成 `???`；中文说明写在 `#` 注释里。
 - 页面和接口使用同一个域名，所以登录 Cookie 是 `SameSite=Lax`。
 
 ## Getting Started
