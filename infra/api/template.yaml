@@ -131,6 +131,32 @@ Resources:
           "integrationError":"$context.integrationErrorMessage",
           "authError":"$context.authorizer.error"}
 
+  # Cloudflare Worker 签名用的 IAM 用户：只能调用这个接口，没有控制台登录，也没有其他权限。
+  # 访问密钥不在模板里创建（否则密钥会出现在 CloudFormation 的记录里），部署后用 CLI 生成，
+  # 直接写进 Worker secrets（AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY）。
+  # 密钥泄露的影响：只能像 Worker 一样调用接口（仍需登录会话），但可以伪造 x-client-ip 绕过登录限流；
+  # 发现泄露就在 IAM 里删掉这个密钥再生成新的。
+  WorkerUser:
+    Type: AWS::IAM::User
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Identity the Cloudflare Worker uses to SigV4-sign requests to the HTTP API
+        must:
+          - Only execute-api:Invoke on this API; no console access and no other permissions
+          - Access keys are created outside CloudFormation and stored only as Worker secrets
+    Properties:
+      Path: /zyk-aws-admin/
+      Policies:
+        - PolicyName: invoke-api
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: execute-api:Invoke
+                Resource: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+      Tags:
+        - { Key: Purpose, Value: cloudflare-worker-sigv4 }
+
 Outputs:
   ApiEndpoint:
     Description: API endpoint (SigV4-signed requests only), configured in the Worker
@@ -143,3 +169,7 @@ Outputs:
   FunctionName:
     Description: API Lambda function name
     Value: !Ref ApiFunction
+
+  WorkerUserName:
+    Description: IAM user for the Cloudflare Worker (create its access key with the CLI)
+    Value: !Ref WorkerUser
