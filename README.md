@@ -46,16 +46,27 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
   - Lambda 入口是 `src/lambda.ts`，本地 Node 入口是 `src/index.ts`，两者共用 `src/app.ts`。
   - `pnpm -F server run build:lambda` 把所有依赖打进 `apps/server/dist-lambda/`（Handler：`index.handler`），部署时不需要 `node_modules`。打包前先 `pnpm run db:generate`。
   - Lambda 上没有 `.env` 和 varlock CLI，环境变量由 `src/lambda-env.ts` 用 zod 校验，规则和 `apps/server/.env.schema` 保持一致。另有 `DATABASE_POOL_MAX`（数据库连接池上限，Lambda 建议设 2）。
-- **基础设施**（`infra/base/template.yaml`，us-east-2，栈名 `zyk-aws-admin-base`）：VPC（两个可用区，公有 / 应用私有 / 数据库私有子网）、NAT、RDS PostgreSQL 18（`db.t4g.micro`，单可用区）、SSH 跳板机、应用密钥和 Lambda 代码包桶。在本地手动部署，跳板机只放行部署时传入的 IP：
+- **基础设施**（`infra/base/template.yaml`，us-east-2，栈名 `zyk-aws-admin-base`）：VPC（两个可用区，公有 / 应用私有 / 数据库私有子网）、NAT、RDS PostgreSQL 18（`db.t4g.micro`，单可用区）、SSH 跳板机、应用密钥和 Lambda 代码包桶。在本地手动部署：
 
   ```bash
   cd infra/base
   sam validate --lint
-  sam deploy --parameter-overrides SshCidr=<你的公网 IP>/32
+  sam deploy
   ```
 
-  `SshCidr` 要填真实公网 IP：开着代理（例如 Clash 的 TUN 模式）时 `curl https://checkip.amazonaws.com` 查到的可能是代理节点的 IP。IP 变了就用新 IP 再执行一次 `sam deploy`。跳板机有固定 IP（输出 `BastionPublicIp`），sshd 同时监听 22 和 443（有些网络封了出站 22）；目前从开着 Clash TUN 的本机还连不上，待排查。数据库开了删除保护，删栈时会留快照；删栈前要先清空代码包桶。账户是 AWS 免费计划：只能用免费套餐机型（跳板机用 `t4g.micro`），费用从免费额度里扣，额度用完或到期后需要升级到付费计划。免费计划只能建 express 配置的 Aurora（不在 VPC 里），所以数据库先用 RDS，升级后可换回 Aurora Serverless v2。
-- **数据库初始化**（基础栈部署后做一次）：数据库在私有子网里，在 AWS CloudShell 的 VPC 环境里操作（VPC 选基础栈的 VPC，子网选一个应用私有子网，安全组选 `LambdaSecurityGroup`）。数据库强制 TLS，证书用 `https://truststore.pki.rds.amazonaws.com/us-east-2/us-east-2-bundle.pem`。
+  数据库开了删除保护，删栈时会留快照；删栈前要先清空代码包桶。账户是 AWS 免费计划：只能用免费套餐机型（跳板机用 `t4g.micro`），费用从免费额度里扣，额度用完或到期后需要升级到付费计划。免费计划只能建 express 配置的 Aurora（不在 VPC 里），所以数据库先用 RDS，升级后可换回 Aurora Serverless v2。
+- **登录跳板机**：跳板机不对公网开放任何端口，SSH 经 EC2 Instance Connect Endpoint（输出 `InstanceConnectEndpointId`）走 AWS API 的 HTTPS 隧道，不需要放行本机 IP，开着代理也能用。`~/.ssh/config` 里加：
+
+  ```
+  Host zyk-bastion
+    HostName <输出 BastionInstanceId>
+    User ec2-user
+    IdentityFile ~/.ssh/izyk.pem
+    ProxyCommand aws ec2-instance-connect open-tunnel --instance-id %h --profile zyk-iam --region us-east-2
+  ```
+
+  之后 `ssh zyk-bastion` 登录（跳板机上装了 psql）。从本机连数据库：`ssh -N -L 15432:<输出 DbEndpoint>:5432 zyk-bastion`，窗口开着时本机 `localhost:15432` 就是线上数据库，连接串用 `sslmode=require`（主机名是 localhost，`verify-full` 校验不过）。
+- **数据库初始化**（基础栈部署后做一次）：数据库在私有子网里，可以用上面的端口转发在本机操作，或者在 AWS CloudShell 的 VPC 环境里操作（VPC 选基础栈的 VPC，子网选一个应用私有子网，安全组选 `LambdaSecurityGroup`）。数据库强制 TLS，证书用 `https://truststore.pki.rds.amazonaws.com/us-east-2/us-east-2-bundle.pem`。
   1. 用主账号 `zyk_admin`（密码在输出 `DbMasterSecretArn` 指向的密钥里）建应用账号 `zyk_app`，再把数据库所有者改成它：`CREATE ROLE zyk_app LOGIN PASSWORD ...; GRANT zyk_app TO zyk_admin; ALTER DATABASE zyk_aws_admin OWNER TO zyk_app;`。RDS 的主账号不是超级用户，要先把自己加进 `zyk_app` 才能改所有者。应用和迁移都用 `zyk_app`，主账号只做维护。
   2. 用 `zyk_app` 执行 `prisma migrate deploy`，连接串带 `sslmode=require&sslcert=<证书文件的绝对路径>`。CloudShell 里不用装整个仓库：单独 `npm install prisma@<pnpm-lock.yaml 里的版本>`，拷入 `packages/db/prisma`，再写一个只从 `MIGRATE_DATABASE_URL` 读连接串的 `prisma.config.ts`。
   3. 把 `DATABASE_URL`（`zyk_app`，带 `sslmode=verify-full`）和 `GITHUB_TOKEN` 写进应用密钥 `zyk-aws-admin-base/app`，保留 `BETTER_AUTH_SECRET`：先读出当前值，用 `jq` 只改这两个字段，再 `put-secret-value`。不要改模板里这个密钥的 `GenerateSecretString`，改了会重新生成整个密钥，把这两个字段清空。
