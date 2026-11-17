@@ -91,6 +91,11 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              # 栈关联了服务角色时，CloudFormation 也用这个角色处理 SAM 转换
+              - Sid: SamTransform
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31"
               # 应用栈的 Lambda 函数（API、迁移）；CloudFormation 调用迁移函数（自定义资源）也用这条
               - Sid: AppFunctions
                 Effect: Allow
@@ -166,6 +171,7 @@ Resources:
                   - iam:GetRolePolicy
                   - iam:ListRolePolicies
                   - iam:ListAttachedRolePolicies
+                  - iam:ListRoleTags
                   - iam:TagRole
                   - iam:UntagRole
                   - iam:UpdateAssumeRolePolicy
@@ -199,6 +205,7 @@ Resources:
                   - iam:GetUserPolicy
                   - iam:ListUserPolicies
                   - iam:ListAttachedUserPolicies
+                  - iam:ListUserTags
                   - iam:TagUser
                   - iam:UntagUser
                   - iam:DetachUserPolicy
