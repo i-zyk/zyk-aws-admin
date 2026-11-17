@@ -92,6 +92,10 @@ jobs:
     timeout-minutes: 30
     environment:
       name: production
+    env:
+      # 生成 Prisma 客户端时配置校验要求有 DATABASE_URL；生成不连数据库，只需要一个合法的地址。
+      # 线上的数据库地址在应用密钥里，部署时由 CloudFormation 注入 Lambda，CI 碰不到
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
     steps:
       - uses: actions/checkout@v5
 
