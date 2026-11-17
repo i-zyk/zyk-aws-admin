@@ -14,3 +14,15 @@ capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 fail_on_empty_changeset = false
 tags = "Project=\"zyk-aws-admin\" Stack=\"api\""
+
+# CI（.github/workflows/deploy-server.yml）用：sam deploy --config-env ci
+# 不写 profile（凭证来自环境变量），--role-arn 和 MigrationsHash 由工作流传入
+[ci.deploy.parameters]
+stack_name = "zyk-aws-admin-api"
+region = "us-east-2"
+s3_bucket = "zyk-aws-admin-base-artifactsbucket-1dn0bggsgm1u"
+s3_prefix = "zyk-aws-admin-api"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
+tags = "Project=\"zyk-aws-admin\" Stack=\"api\""

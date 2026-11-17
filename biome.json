@@ -16,6 +16,7 @@
       "!**/.next",
       "!**/dist",
       "!**/dist-lambda",
+      "!**/dist-migrate",
       "!**/.turbo",
       "!**/.nx",
       "!**/dev-dist",

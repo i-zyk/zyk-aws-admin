@@ -1,0 +1,314 @@
+AWSTemplateFormatVersion: "2010-09-09"
+# CI 栈：GitHub Actions 部署应用栈用的身份。本地手动部署（CI 不能给自己建权限）。
+#
+# 账户的 SCP 禁止创建 OIDC 身份提供商，GitHub Actions 只能用长期访问密钥。为了让密钥泄露的影响尽量小，权限分三层：
+#   1. DeployUser（密钥存在 GitHub production 环境的 secrets 里）：只能对应用栈生成和执行变更集、
+#      往代码包桶的应用栈前缀下上传，以及把 CloudFormationRole 交给 CloudFormation。它自己建不了任何资源。
+#   2. CloudFormationRole（CloudFormation 服务角色）：真正创建应用栈资源，权限限定在应用栈用到的资源类型和名称前缀。
+#   3. AppBoundary（权限边界）：服务角色只能创建或修改挂了这个边界的 IAM 角色和用户，也改不了边界本身。
+#      所以就算有人拿到部署密钥、改了应用栈模板，建出来的角色和用户也超不出这个上限（写日志、Lambda 在 VPC 里建网卡、
+#      调用 API），碰不到基础栈、数据库主账号和账户的其他部分。
+# 会上传到 AWS 的说明文字用英文：中文在 CloudFormation 里会变成 ???。
+Description: >-
+  zyk-aws-admin CI stack: GitHub Actions deploy user, CloudFormation service role for the
+  app stack, and the permissions boundary for app stack IAM identities.
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+
+Parameters:
+  AppStackName:
+    Type: String
+    Default: zyk-aws-admin-api
+    Description: App stack deployed by CI
+  BaseStackName:
+    Type: String
+    Default: zyk-aws-admin-base
+    Description: Base stack (artifacts bucket export and the <name>/app secret)
+
+Resources:
+  # ---------------------------------------------------------------- 权限边界
+  # 应用栈里所有 IAM 角色和用户都必须挂这个边界，实际权限 = 自身策略 ∩ 边界
+  AppBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Upper bound for every IAM role and user in the app stack
+        must:
+          - Only what the app needs (Lambda logs, Lambda VPC ENIs, invoking the HTTP API); widening it widens what a leaked CI key can do
+    Properties:
+      Path: /zyk-aws-admin/
+      Description: Permissions boundary for zyk-aws-admin app stack identities
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # AWSLambdaBasicExecutionRole 的内容
+          - Sid: LambdaLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: "*"
+          # AWSLambdaVPCAccessExecutionRole 的内容
+          - Sid: LambdaVpcNetworking
+            Effect: Allow
+            Action:
+              - ec2:CreateNetworkInterface
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeSubnets
+              - ec2:DeleteNetworkInterface
+              - ec2:AssignPrivateIpAddresses
+              - ec2:UnassignPrivateIpAddresses
+            Resource: "*"
+          # Worker 用户调用 HTTP API（实际策略只给了应用栈那一个 API）
+          - Sid: InvokeApis
+            Effect: Allow
+            Action: execute-api:Invoke
+            Resource: !Sub "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:*"
+
+  # ---------------------------------------------------------------- CloudFormation 服务角色
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Service role CloudFormation uses to create and update the app stack on behalf of CI
+        must:
+          - IAM roles and users it creates or changes must carry AppBoundary
+          - Scoped to the app stack name prefix; it must not be able to touch the base or CI stacks
+    Properties:
+      Path: /zyk-aws-admin/
+      Description: CloudFormation service role for the zyk-aws-admin app stack
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudformation.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: app-stack
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # 应用栈的 Lambda 函数（API、迁移）；CloudFormation 调用迁移函数（自定义资源）也用这条
+              - Sid: AppFunctions
+                Effect: Allow
+                Action: lambda:*
+                Resource: !Sub "arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AppStackName}-*"
+              # 函数地址（Function URL）可以绕过 API Gateway 的 IAM 鉴权直接对外，禁止创建
+              - Sid: NoFunctionUrls
+                Effect: Deny
+                Action:
+                  - lambda:CreateFunctionUrlConfig
+                  - lambda:UpdateFunctionUrlConfig
+                Resource: "*"
+              # Lambda 放进 VPC 时要检查子网和安全组
+              - Sid: VpcLookups
+                Effect: Allow
+                Action:
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                Resource: "*"
+              - Sid: HttpApis
+                Effect: Allow
+                Action: apigateway:*
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis"
+                  - !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/*"
+                  - !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}::/tags/*"
+              - Sid: AppLogGroups
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:DeleteRetentionPolicy
+                  - logs:TagResource
+                  - logs:UntagResource
+                  - logs:ListTagsForResource
+                  - logs:TagLogGroup
+                  - logs:UntagLogGroup
+                  - logs:ListTagsLogGroup
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AppStackName}*"
+                  - !Sub "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/${AppStackName}*"
+              # 日志组查询和 HTTP API 访问日志投递只能对 * 授权
+              - Sid: LogLookupsAndDelivery
+                Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                  - logs:CreateLogDelivery
+                  - logs:GetLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:PutResourcePolicy
+                  - logs:DescribeResourcePolicies
+                Resource: "*"
+              # 创建或修改权限的操作要求目标挂着 AppBoundary
+              - Sid: BoundedRoleChanges
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:PutRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:PutRolePermissionsBoundary
+                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppStackName}-*"
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref AppBoundary
+              - Sid: RoleReadsAndRemovals
+                Effect: Allow
+                Action:
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:DeleteRole
+                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppStackName}-*"
+              - Sid: PassAppRolesToLambda
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${AppStackName}-*"
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              # Worker 用户（路径 /zyk-aws-admin/）；不给建访问密钥和控制台密码的权限
+              - Sid: BoundedUserChanges
+                Effect: Allow
+                Action:
+                  - iam:CreateUser
+                  - iam:PutUserPolicy
+                  - iam:AttachUserPolicy
+                  - iam:PutUserPermissionsBoundary
+                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:user/zyk-aws-admin/${AppStackName}-*"
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref AppBoundary
+              - Sid: UserReadsAndRemovals
+                Effect: Allow
+                Action:
+                  - iam:GetUser
+                  - iam:GetUserPolicy
+                  - iam:ListUserPolicies
+                  - iam:ListAttachedUserPolicies
+                  - iam:TagUser
+                  - iam:UntagUser
+                  - iam:DetachUserPolicy
+                  - iam:DeleteUserPolicy
+                  - iam:DeleteUser
+                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:user/zyk-aws-admin/${AppStackName}-*"
+              # 创建和更新函数时 Lambda 用调用者的身份读代码包
+              - Sid: ReadArtifacts
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                Resource:
+                  - Fn::Sub:
+                      - "arn:${AWS::Partition}:s3:::${Bucket}/${AppStackName}/*"
+                      - Bucket:
+                          Fn::ImportValue: !Sub "${BaseStackName}-ArtifactsBucketName"
+              # 模板里的密钥动态引用（{{resolve:secretsmanager:...}}）
+              - Sid: ReadAppSecret
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${BaseStackName}/app-*"
+
+  # ---------------------------------------------------------------- 部署用户
+  # 访问密钥不在模板里创建，部署后用 CLI 生成并直接写进 GitHub production 环境的 secrets
+  DeployUser:
+    Type: AWS::IAM::User
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Identity GitHub Actions uses to deploy the app stack (OIDC is blocked by the organization SCP)
+        must:
+          - May only drive CloudFormation change sets on the app stack through CloudFormationRole and upload artifacts
+          - Access keys live only in the GitHub production environment secrets
+    Properties:
+      Path: /zyk-aws-admin/
+      Policies:
+        - PolicyName: deploy-app-stack
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: AppStackChangeSets
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResource
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:DescribeEvents
+                  - cloudformation:GetTemplate
+                  - cloudformation:ListStackResources
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AppStackName}/*"
+              # 模板用了 SAM 转换
+              - Sid: SamTransform
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31"
+              - Sid: TemplateChecks
+                Effect: Allow
+                Action:
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:GetTemplateSummary
+                Resource: "*"
+              - Sid: PassServiceRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CloudFormationRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+              - Sid: UploadArtifacts
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource:
+                  - Fn::Sub:
+                      - "arn:${AWS::Partition}:s3:::${Bucket}/${AppStackName}/*"
+                      - Bucket:
+                          Fn::ImportValue: !Sub "${BaseStackName}-ArtifactsBucketName"
+              # sam deploy 上传前先检查同样的代码包是否已存在
+              - Sid: ListArtifacts
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource:
+                  - Fn::Sub:
+                      - "arn:${AWS::Partition}:s3:::${Bucket}"
+                      - Bucket:
+                          Fn::ImportValue: !Sub "${BaseStackName}-ArtifactsBucketName"
+      Tags:
+        - { Key: Purpose, Value: github-actions-deploy }
+
+Outputs:
+  AppBoundaryArn:
+    Description: Permissions boundary every app stack IAM identity must carry
+    Value: !Ref AppBoundary
+    Export:
+      Name: !Sub "${AWS::StackName}-AppBoundaryArn"
+
+  CloudFormationRoleArn:
+    Description: Service role passed to sam deploy (--role-arn) by CI
+    Value: !GetAtt CloudFormationRole.Arn
+
+  DeployUserName:
+    Description: IAM user for GitHub Actions (create its access key with the CLI)
+    Value: !Ref DeployUser

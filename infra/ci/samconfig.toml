@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+stack_name = "zyk-aws-admin-ci"
+region = "us-east-2"
+profile = "zyk-iam"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+fail_on_empty_changeset = false
+tags = "Project=\"zyk-aws-admin\" Stack=\"ci\""

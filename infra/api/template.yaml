@@ -14,6 +14,12 @@ Description: >-
 #   - 有权限查看 Lambda 配置的人能在控制台看到明文；
 #   - 改了 Secrets Manager 里的值后，要把 SecretRevision 参数加 1 再部署，否则 CloudFormation
 #     不会重新读取密钥，函数还在用旧值。
+#
+# 数据库迁移：部署时 CloudFormation 先调用迁移函数（自定义资源 Migrations），成功后才更新 API 函数；
+# 迁移失败整个部署回滚，线上继续跑旧代码。MigrationsHash 是迁移目录的哈希（CI 计算），变了才会触发迁移。
+#
+# 权限边界：这里所有 IAM 角色和用户都挂 CI 栈的 AppBoundary。CI 用的 CloudFormation 服务角色只能创建或修改
+# 挂了这个边界的身份，所以去掉边界会让 CI 部署失败。
 
 Metadata:
   AWSToolsMetrics:
@@ -37,6 +43,16 @@ Parameters:
     MinValue: 1
     # 应用密钥修改后加 1 再部署，让 CloudFormation 重新读取密钥值
     Description: Bump after changing the app secret so CloudFormation re-resolves it
+  CiStackName:
+    Type: String
+    Default: zyk-aws-admin-ci
+    # 权限边界从 CI 栈的导出值引用
+    Description: CI stack name (exports the permissions boundary)
+  MigrationsHash:
+    Type: String
+    Default: none
+    # packages/db/prisma/migrations 的哈希，由 CI 计算传入；不传时是 none，同样会触发一次迁移（重复执行不做任何事）
+    Description: Hash of the migrations directory; a change triggers the migration custom resource
 
 Resources:
   # 日志组单独建：可以设置保留天数（Lambda 自动建的日志组永久保留）
@@ -48,6 +64,8 @@ Resources:
 
   ApiFunction:
     Type: AWS::Serverless::Function
+    # 迁移成功后才更新 API 函数，新代码上线时表结构已经就绪
+    DependsOn: Migrations
     Metadata:
       com.aws.cloudformation.Context:
         why: Hono API (apps/server/src/lambda.ts), bundle built by pnpm -F server run build:lambda
@@ -59,6 +77,8 @@ Resources:
       Handler: index.handler
       Runtime: nodejs24.x
       Architectures: [arm64]
+      PermissionsBoundary:
+        Fn::ImportValue: !Sub "${CiStackName}-AppBoundaryArn"
       MemorySize: 1024
       # 小于 HTTP API 的 30 秒集成超时，超时时返回的是 Lambda 的错误而不是网关的 503
       Timeout: 20
@@ -100,6 +120,59 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /{proxy+}
             Method: ANY
+
+  # ---------------------------------------------------------------- 数据库迁移
+  MigrateLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-migrate"
+      RetentionInDays: 14
+
+  MigrateFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Applies Prisma migrations inside the VPC (apps/server/src/migrate-lambda.ts), built by pnpm -F server run build:migrate
+        must:
+          - Must always reply to CloudFormation, otherwise deployments hang until the custom resource times out
+          - Reserved concurrency 1 so two migrations never run at once
+    Properties:
+      CodeUri: ../../apps/server/dist-migrate
+      Handler: index.handler
+      Runtime: nodejs24.x
+      Architectures: [arm64]
+      PermissionsBoundary:
+        Fn::ImportValue: !Sub "${CiStackName}-AppBoundaryArn"
+      MemorySize: 256
+      Timeout: 300
+      ReservedConcurrentExecutions: 1
+      VpcConfig:
+        SubnetIds: !Split
+          - ","
+          - Fn::ImportValue: !Sub "${BaseStackName}-AppSubnetIds"
+        SecurityGroupIds:
+          - Fn::ImportValue: !Sub "${BaseStackName}-LambdaSecurityGroupId"
+      LoggingConfig:
+        LogGroup: !Ref MigrateLogGroup
+        LogFormat: Text
+      Environment:
+        Variables:
+          NODE_OPTIONS: --enable-source-maps
+          NODE_EXTRA_CA_CERTS: /var/runtime/ca-cert.pem
+          APP_SECRET_REVISION: !Ref SecretRevision
+          # 和 API 用同一个账号 zyk_app（表的所有者）
+          DATABASE_URL: !Sub "{{resolve:secretsmanager:${BaseStackName}/app:SecretString:DATABASE_URL}}"
+
+  Migrations:
+    Type: Custom::PrismaMigrations
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: Runs MigrateFunction during deployment, before ApiFunction is updated
+    Properties:
+      ServiceToken: !GetAtt MigrateFunction.Arn
+      # 迁移函数没有回复时最多等 6 分钟（函数超时 5 分钟），不会卡住部署 1 小时
+      ServiceTimeout: 360
+      MigrationsHash: !Ref MigrationsHash
 
   ApiAccessLogGroup:
     Type: AWS::Logs::LogGroup
@@ -146,6 +219,8 @@ Resources:
           - Access keys are created outside CloudFormation and stored only as Worker secrets
     Properties:
       Path: /zyk-aws-admin/
+      PermissionsBoundary:
+        Fn::ImportValue: !Sub "${CiStackName}-AppBoundaryArn"
       Policies:
         - PolicyName: invoke-api
           PolicyDocument:
@@ -169,6 +244,10 @@ Outputs:
   FunctionName:
     Description: API Lambda function name
     Value: !Ref ApiFunction
+
+  MigrateFunctionName:
+    Description: Migration Lambda (invoke it directly to re-run migrations by hand)
+    Value: !Ref MigrateFunction
 
   WorkerUserName:
     Description: IAM user for the Cloudflare Worker (create its access key with the CLI)
