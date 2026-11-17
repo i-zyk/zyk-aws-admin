@@ -42,7 +42,7 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 ## 部署
 
 - **前端**：`apps/web` 用 OpenNext 打包成 Cloudflare Worker，推送到 main 时由 `.github/workflows/deploy-web.yml` 发布到 `admin.izyk.online`。
-- **后端**：`apps/server` 部署到 AWS Lambda（API Gateway HTTP API，IAM 鉴权），用 AWS SAM 管理；Cloudflare Worker 转发还没接上。
+- **后端**：`apps/server` 部署到 AWS Lambda（API Gateway HTTP API，IAM 鉴权），用 AWS SAM 管理；浏览器只访问 `admin.izyk.online`，由 Cloudflare Worker 签名后转发过去（见下文「Worker 转发」）。
   - Lambda 入口是 `src/lambda.ts`，本地 Node 入口是 `src/index.ts`，两者共用 `src/app.ts`。
   - `pnpm -F server run build:lambda` 把所有依赖打进 `apps/server/dist-lambda/`（Handler：`index.handler`），部署时不需要 `node_modules`。打包前先 `pnpm run db:generate`。
   - Lambda 上没有 `.env` 和 varlock CLI，环境变量由 `src/lambda-env.ts` 用 zod 校验，规则和 `apps/server/.env.schema` 保持一致。另有 `DATABASE_POOL_MAX`（数据库连接池上限，Lambda 建议设 2）。
@@ -72,8 +72,21 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 
   - 密钥（`BETTER_AUTH_SECRET`、`DATABASE_URL`、`GITHUB_TOKEN`）在部署时从应用密钥 `zyk-aws-admin-base/app` 读取，写进 Lambda 的环境变量：有权限查看 Lambda 配置的人能在控制台看到明文。
   - 修改应用密钥后要重新部署并把 `SecretRevision` 加 1（`sam deploy --parameter-overrides SecretRevision=2`），否则 CloudFormation 不会重新读取，函数还在用旧值。
-  - 输出 `ApiEndpoint` 是接口地址，`ApiExecuteArn` 是给 Worker 授权调用时用的资源 ARN。本地测试可以用 curl 自带的签名：`curl --aws-sigv4 "aws:amz:us-east-2:execute-api" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" <ApiEndpoint>/`，返回 `OK`。
+  - 输出 `ApiEndpoint` 是接口地址（写在 `apps/web/wrangler.jsonc` 的 `BACKEND_URL`），`WorkerUserName` 是 Worker 签名用的 IAM 用户（只能调用这个接口）。本地测试可以用 curl 自带的签名：`curl --aws-sigv4 "aws:amz:us-east-2:execute-api" --user "$AWS_ACCESS_KEY_ID:$AWS_SECRET_ACCESS_KEY" <ApiEndpoint>/`，返回 `OK`。
 - 两个模板里会上传到 AWS 的文字（栈说明、参数说明、输出说明、资源 `Metadata`）用英文，中文在 CloudFormation 里会变成 `???`；中文说明写在 `#` 注释里。
+- **Worker 转发**：`apps/web/worker.ts` 是 Worker 的自定义入口，`/api/auth/*` 和 `/trpc/*` 由 `src/lib/backend-proxy.ts` 签名（SigV4）后转发给 `BACKEND_URL`，其他路径交给 OpenNext 生成的 Next.js。服务端渲染检查登录（`src/lib/require-session.ts`）也直接签名调用后端，不请求自己的域名；本地 `next dev` 不经过这些，仍直连 `NEXT_PUBLIC_SERVER_URL`。
+  - 只转发 `accept`、`content-type`、`cookie`、`origin`、`user-agent` 五个请求头，`x-client-ip` 总是用 Cloudflare 的 `CF-Connecting-IP` 覆盖（后端登录限流按它计数）。
+  - 签名用的访问密钥是 Worker secrets `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`，部署时不会被覆盖。生成或更换（先在 `apps/web` 下 `npx wrangler login`；`<用户名>` 是应用栈输出 `WorkerUserName`）：
+
+    ```bash
+    KEY_JSON=$(aws iam create-access-key --user-name <用户名> --output json)
+    jq -r .AccessKey.AccessKeyId <<<"$KEY_JSON" | npx wrangler secret put AWS_ACCESS_KEY_ID --name zyk-aws-admin-web
+    jq -r .AccessKey.SecretAccessKey <<<"$KEY_JSON" | npx wrangler secret put AWS_SECRET_ACCESS_KEY --name zyk-aws-admin-web
+    unset KEY_JSON
+    ```
+
+    换新密钥后用 `aws iam delete-access-key` 删掉旧的（一个 IAM 用户最多两个密钥）。密钥泄露时也这样处理：拿到它的人只能像 Worker 一样调用接口，但能伪造 `x-client-ip` 绕过登录限流。
+  - 本地构建（`pnpm -F web run cf:build`）要能访问 Google Fonts，开着代理时设 `HTTPS_PROXY`。
 - 页面和接口使用同一个域名，所以登录 Cookie 是 `SameSite=Lax`。
 
 ## Getting Started

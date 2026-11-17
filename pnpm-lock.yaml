@@ -530,6 +530,9 @@ importers:
       '@zyk-aws-admin/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      aws4fetch:
+        specifier: 1.0.20
+        version: 1.0.20
       babel-plugin-react-compiler:
         specifier: ^1.0.0
         version: 1.0.0

@@ -22,6 +22,7 @@
     "@varlock/nextjs-integration": "1.2.5",
     "@zyk-aws-admin/api": "workspace:*",
     "@zyk-aws-admin/ui": "workspace:*",
+    "aws4fetch": "1.0.20",
     "babel-plugin-react-compiler": "^1.0.0",
     "better-auth": "catalog:",
     "lucide-react": "catalog:",
