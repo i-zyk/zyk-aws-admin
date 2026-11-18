@@ -41,6 +41,8 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 
 ## 部署
 
+![GitSpace 部署流程，从基础设施准备、数据库初始化到自动发布和上线验证](docs/deployment-workflow.png)
+
 - **前端**：`apps/web` 用 OpenNext 打包成 Cloudflare Worker，推送到 main 时由 `.github/workflows/deploy-web.yml` 发布到 `admin.izyk.online`。
 - **后端**：`apps/server` 部署到 AWS Lambda（API Gateway HTTP API，IAM 鉴权），用 AWS SAM 管理；浏览器只访问 `admin.izyk.online`，由 Cloudflare Worker 签名后转发过去（见下文「Worker 转发」）。
   - Lambda 入口是 `src/lambda.ts`，本地 Node 入口是 `src/index.ts`，两者共用 `src/app.ts`。
