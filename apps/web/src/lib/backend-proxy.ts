@@ -25,11 +25,13 @@ const CLIENT_IP_HEADER = "x-client-ip";
  * - Cloudflare 运行时会改写部分请求头（比如 accept-encoding），被签名的头一旦被改，签名就对不上；
  * - cf-*、x-forwarded-* 等内部头和客户端自带的 x-client-ip 不应该传到后端。
  * content-type 和 user-agent 不参与签名（aws4fetch 的规则），user-agent 后端会记进会话表。
+ * expo-origin 是原生 App（apps/native）的来源：App 的请求没有 Origin，Better Auth 的 expo 插件用它代替 Origin 做来源校验。
  */
 const FORWARDED_HEADERS = [
 	"accept",
 	"content-type",
 	"cookie",
+	"expo-origin",
 	"origin",
 	"user-agent",
 ] as const;

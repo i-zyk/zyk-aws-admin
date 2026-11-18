@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.zyk-aws-admin"
+      "bundleIdentifier": "izyk.gitspace"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.zykawsadmin"
+      "package": "izyk.gitspace"
     },
     "web": {
       "bundler": "metro",
@@ -44,6 +44,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2595c38b-aef8-42d7-82f0-328c26162103"
+      }
+    },
+    "owner": "izyk"
   }
 }
